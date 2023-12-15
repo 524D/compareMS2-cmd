@@ -274,6 +274,7 @@ static int parseArgs(int argc, char *argv[], ParametersType *par,
 				case 'L': par->minMz = parseDouble(argc, argv, &i); break;
 				case 'U': par->maxMz = parseDouble(argc, argv, &i); break;
 				case 'x': par->experimentalFeatures = parseInt(argc, argv, &i); break;
+				case 'X': strcpy(par->experimentalOutputFilename, realArg(argc, argv, &i)); break;
 				default:
 					printf("Unknown option: %c\n%s", argv[i][1], USAGE_STRING);
 					*err = -1;
