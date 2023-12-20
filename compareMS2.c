@@ -117,6 +117,17 @@ typedef struct {
 	char experimentalFeatures;
 } ParametersType;
 
+// Allocate memory, on fail exit with message
+static void* alloc_chk(size_t s)
+{
+	void* p = calloc(1, s);
+	if (p == 0) {
+		fprintf(stderr, "Out of memory\n");
+		exit(1);
+	}
+	return p;
+}
+
 /* atol0 acts the same as atol, but handles a null pointer without crashing */
 static long atol0(const char *p) {
 	if (p == 0) {
@@ -344,7 +355,7 @@ static int preCheckMGF(ParametersType *par, DatasetType *dataset) {
 
 	if ((par->topN > -1) && (par->topN < dataset->Size)) {
 		printf("filtering top-%ld spectra...", par->topN);
-		dataset->Intensities = malloc(dataset->Size * sizeof(double));
+		dataset->Intensities = alloc_chk(dataset->Size * sizeof(double));
 		if ((fd = fopen(dataset->Filename, "r")) == NULL) {
 			printf("error opening dataset %c %s for reading", dataset->id, dataset->Filename);
 			return -1;
@@ -466,9 +477,9 @@ static int readMGF(ParametersType *par, DatasetType *dataset, SpecType *spec) {
 		}
 		if (strspn("PEPMASS", p) > 6) {
 			spec[i].precursorMz = atof(strpbrk(p, "0123456789"));
-			spec[i].mz = (double*) malloc(par->peakCount * sizeof(double));
-			spec[i].intensity = (double*) malloc(par->peakCount * sizeof(double));
-			spec[i].bin = (double*) malloc(par->nBins * sizeof(double));
+			spec[i].mz = (double*) alloc_chk(par->peakCount * sizeof(double));
+			spec[i].intensity = (double*) alloc_chk(par->peakCount * sizeof(double));
+			spec[i].bin = (double*) alloc_chk(par->nBins * sizeof(double));
 			continue;
 		}
 		if (strspn("CHARGE", p) > 5) {
@@ -711,13 +722,13 @@ int main(int argc, char *argv[]) {
 	/* allocate memory */
 
 	printf("allocating memory...");
-	A = (SpecType*) malloc(datasetA.Size * sizeof(SpecType));
-	B = (SpecType*) malloc(datasetB.Size * sizeof(SpecType));
+	A = (SpecType*) alloc_chk(datasetA.Size * sizeof(SpecType));
+	B = (SpecType*) alloc_chk(datasetB.Size * sizeof(SpecType));
 	if (par.experimentalFeatures == 1) {
-		massDiffDotProductHistogram = (long**) malloc(
+		massDiffDotProductHistogram = (long**) alloc_chk(
 		MASSDIFF_HISTOGRAM_BINS * sizeof(long*));
 		for (i = 0; i < MASSDIFF_HISTOGRAM_BINS; i++)
-			massDiffDotProductHistogram[i] = malloc(
+			massDiffDotProductHistogram[i] = alloc_chk(
 			DOTPROD_HISTOGRAM_BINS * sizeof(long));
 	}
 
