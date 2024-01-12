@@ -250,20 +250,28 @@ static int parseArgs(int argc, char *argv[], ParametersType *par,
 			switch (argv[i][1]) {
 				case 'A': strcpy(datasetA->Filename, realArg(argc, argv, &i)); break;
 				case 'B': strcpy(datasetB->Filename, realArg(argc, argv, &i)); break;
-				case 'W': strcpy(temp, realArg(argc, argv, &i));
-						  p = strtok(temp, ",");
-						  par->startScan = atol0(p);
-						  p = strtok('\0', ",");
-						  par->endScan = atol0(p);
-						  break;
+				case 'I': par->minPeaks = parseInt(argc, argv, &i); break;
+				case 'L': par->minMz = parseDouble(argc, argv, &i); break;
+				case 'N': par->topN = parseInt(argc, argv, &i); break;
 				case 'R': strcpy(temp, realArg(argc, argv, &i));
 							p = strtok(temp, ",");
 							par->startRT = atof0(p);
 							p = strtok('\0', ",");
 							par->endRT = atof0(p);
 							break;
-				case 'o': strcpy(par->outputFilename, realArg(argc, argv, &i)); break;
-				case 'p': par->maxPrecursorDifference = parseDouble(argc, argv, &i); break;
+				case 'U': par->maxMz = parseDouble(argc, argv, &i); break;
+				case 'W': strcpy(temp, realArg(argc, argv, &i));
+						  p = strtok(temp, ",");
+						  par->startScan = atol0(p);
+						  p = strtok('\0', ",");
+						  par->endScan = atol0(p);
+						  break;
+				case 'X': strcpy(par->experimentalOutputFilename, realArg(argc, argv, &i)); break;
+
+				case 'b': par->binSize = parseDouble(argc, argv, &i); break;
+				case 'c': par->cutoff = parseDouble(argc, argv, &i); break;
+				case 'd': par->metric = parseInt(argc, argv, &i); break;
+				case 'f': par->spectrum_metric = parseInt(argc, argv, &i); break;
 				case 'm': /* minimum basepeak and total intensity */
 				 strcpy(temp, realArg(argc, argv, &i));
 							p = strtok(temp, ",");
@@ -271,22 +279,14 @@ static int parseArgs(int argc, char *argv[], ParametersType *par,
 							p = strtok('\0', ",");
 							par->minTotalIonCurrent = atof0(p);
 							break;
-
-				case 'w': par->maxScanNumberDifference = parseDouble(argc, argv, &i); break;
-				case 'r': par->maxRTDifference = parseDouble(argc, argv, &i); break;
-				case 'c': par->cutoff = parseDouble(argc, argv, &i); break;
-				case 's': par->scaling = parseDouble(argc, argv, &i); break;
 				case 'n': par->noise = parseDouble(argc, argv, &i); break;
-				case 'd': par->metric = parseInt(argc, argv, &i); break;
-				case 'f': par->spectrum_metric = parseInt(argc, argv, &i); break;
+				case 'o': strcpy(par->outputFilename, realArg(argc, argv, &i)); break;
+				case 'p': par->maxPrecursorDifference = parseDouble(argc, argv, &i); break;
 				case 'q': par->qc = parseInt(argc, argv, &i); break;
-				case 'N': par->topN = parseInt(argc, argv, &i); break;
-				case 'b': par->binSize = parseDouble(argc, argv, &i); break;
-				case 'I': par->minPeaks = parseInt(argc, argv, &i); break;
-				case 'L': par->minMz = parseDouble(argc, argv, &i); break;
-				case 'U': par->maxMz = parseDouble(argc, argv, &i); break;
+				case 'r': par->maxRTDifference = parseDouble(argc, argv, &i); break;
+				case 's': par->scaling = parseDouble(argc, argv, &i); break;
+				case 'w': par->maxScanNumberDifference = parseDouble(argc, argv, &i); break;
 				case 'x': par->experimentalFeatures = parseInt(argc, argv, &i); break;
-				case 'X': strcpy(par->experimentalOutputFilename, realArg(argc, argv, &i)); break;
 				default:
 					printf("Unknown option: %c\n%s", argv[i][1], USAGE_STRING);
 					*err = -1;
