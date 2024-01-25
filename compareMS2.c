@@ -91,6 +91,7 @@ typedef struct {
 
 typedef struct {
 	char outputFilename[MAX_LEN];
+	char JSONFilename[MAX_LEN];
 	char experimentalOutputFilename[MAX_LEN];
 	double minBasepeakIntensity;
 	double minTotalIonCurrent;
@@ -175,6 +176,7 @@ double quickSelect(double A[], long left, long right, long k) {
 
 static void initPar(ParametersType *par) {
 	strcpy(par->outputFilename, "output.txt");
+	strcpy(par->JSONFilename, "");
 	par->minBasepeakIntensity = DEFAULT_MIN_BASEPEAK_INTENSITY;
 	par->minTotalIonCurrent = DEFAULT_MIN_TOTAL_ION_CURRENT;
 	par->maxScanNumberDifference = DEFAULT_MAX_SCAN_NUMBER_DIFFERENCE;
@@ -251,6 +253,7 @@ static int parseArgs(int argc, char *argv[], ParametersType *par,
 				case 'A': strcpy(datasetA->Filename, realArg(argc, argv, &i)); break;
 				case 'B': strcpy(datasetB->Filename, realArg(argc, argv, &i)); break;
 				case 'I': par->minPeaks = parseInt(argc, argv, &i); break;
+				case 'J': strcpy(par->JSONFilename, realArg(argc, argv, &i)); break;
 				case 'L': par->minMz = parseDouble(argc, argv, &i); break;
 				case 'N': par->topN = parseInt(argc, argv, &i); break;
 				case 'R': strcpy(temp, realArg(argc, argv, &i));
@@ -665,6 +668,167 @@ static void computeDotProdHistogram(ParametersType *par, DatasetType *datasetA, 
 	}
 }
 
+// Function escapeJSON takes a pointer to a string, and returns a pointer to a new string
+// where all special JSON characters have been escaped
+static char *escapeJSON(char *s) {
+	char *escaped = (char*) alloc_chk(strlen(s) * 2 + 1);
+
+	char *p = escaped;
+	while (*s != '\0') {
+		// Special characters: \\ \b \f \n \r \t \"
+		if (*s == '\\') {
+			*p++ = '\\';
+			*p++ = '\\';
+		}
+		else if (*s == '\b') {
+			*p++ = '\\';
+			*p++ = 'b';
+		}
+		else if (*s == '\f') {
+			*p++ = '\\';
+			*p++ = 'f';
+		}
+		else if (*s == '\n') {
+			*p++ = '\\';
+			*p++ = 'n';
+		}
+		else if (*s == '\r') {
+			*p++ = '\\';
+			*p++ = 'r';
+		}
+		else if (*s == '\t') {
+			*p++ = '\\';
+			*p++ = 't';
+		}
+		else if (*s == '"') {
+			*p++ = '\\';
+			*p++ = '"';
+		}
+		else {
+			*p++ = *s;
+		}
+		s++;
+	}
+	*p = '\0';
+	return escaped;
+}
+
+// writeJSON writes the result data in JSON format to the file specified in par->JSONFilename
+// Returns 0 if successful, -1 if not
+static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *datasetB,
+	 long *dotprodHistogram, long *massDiffHistogram, long **massDiffDotProductHistogram,
+	 long nComparisons, long greaterThanCutoff, long sAB, long sBA, int argc, char *argv[]) {
+
+	FILE *output;
+	long i, j;
+
+	if (strcmp(par->JSONFilename, "") == 0) {
+		return 0;
+	}
+	if ((output = fopen(par->JSONFilename, "w")) == NULL) {
+		printf("error opening JSON output file %s for writing", par->outputFilename);
+		return -1;
+	}
+
+	fprintf(output, "{\n");
+	// Write command line parameters to JSON file
+	fprintf(output, "\t\"command_line\": \"");
+	for (i = 0; i < argc; i++) {
+		// Escape special JSON characters
+		char *arg = escapeJSON(argv[i]);
+		fprintf(output, "\\\"%s\\\" ", arg);
+		free(arg);
+	}
+	fprintf(output, "\",\n");
+	char *fn;
+	fn = escapeJSON(datasetA->Filename);
+	fprintf(output, "\t\"dataset_A\": \"%s\",\n", fn);
+	free(fn);
+	fn = escapeJSON(datasetB->Filename);
+	fprintf(output, "\t\"dataset_B\": \"%s\",\n", fn);
+	free(fn);
+	if (par->metric == 0) /* original metric */
+	{
+		if (greaterThanCutoff > 0)
+			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+					(double) nComparisons / 2.0 / greaterThanCutoff);
+		if (greaterThanCutoff == 0)
+			fprintf(output, "\t\"set_distance\": \"INF\",\n");
+	}
+	if (par->metric == 1) /* symmetric metric */
+	{
+		if (greaterThanCutoff > 0)
+			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+					(double) (datasetA->Size + datasetB->Size) / greaterThanCutoff);
+		if (greaterThanCutoff == 0)
+			fprintf(output, "\t\"set_distance\": \"INF\",\n");
+	}
+	if (par->metric == 2) /* compareMS2 2.0 symmetric metric */
+	{
+		if ((sAB + sBA) > 0) {
+			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+					1.0
+							/ ((double) sAB / (2 * datasetA->Size)
+									+ (double) sBA / (2 * datasetB->Size)) - 1.0);
+		}
+		if ((sAB + sBA) == 0) { /* distance between sets with no similar spectra */
+			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+					(4.0 * (double) datasetA->Size * datasetB->Size)
+							/ (datasetA->Size + datasetB->Size) - 1.0);
+		}
+	}
+	fprintf(output, "\t\"set_metric\": %i,\n", par->metric);
+	fprintf(output,
+			"\t\"scan_range\": [%ld, %ld],\n\t\"max_scan_diff\": %1.2f,\n\t\"max_mz_diff\": %1.4f,\n\t\"scaling_power\": %1.2f,\n\t\"noise_threshold\": %1.1f,\n\t\"min_basepeak_intensity\": %1.2f,\n\t\"min_total_ion_current\": %1.2f,\n",
+			par->startScan, par->endScan, par->maxScanNumberDifference, par->maxPrecursorDifference,
+			par->scaling, par->noise, par->minBasepeakIntensity, par->minTotalIonCurrent);
+	if (par->qc == 0)
+		fprintf(output, "\t\"dataset_A_QC\": %ld,\n", datasetA->Size);
+	if (par->qc == 0)
+		fprintf(output, "\t\"dataset_B_QC\": %ld,\n", datasetB->Size);
+	fprintf(output, "\t\"n_gt_cutoff\": %ld,\n", greaterThanCutoff);
+	fprintf(output, "\t\"n_comparisons\": %ld,\n", nComparisons);
+	fprintf(output, "\t\"min_peaks\": %ld,\n", datasetA->Size);
+	fprintf(output, "\t\"max_peaks\": %ld,\n", datasetB->Size);
+	fprintf(output, "\t\"m/z_range\": [%.4f, %.4f]\n,", par->minMz, par->maxMz);
+	fprintf(output, "\t\"m/z_bin_size\": %.4f,\n", par->binSize);
+	fprintf(output, "\t\"n_m/z_bins\": %ld,\n", par->nBins);
+
+	char sep = ' ';
+	fprintf(output, "\t\"histogram\": [");
+	for (i = 0; i < DOTPROD_HISTOGRAM_BINS; i++) {
+		fprintf(output,
+				 "%c\n"
+				 "\t\t{\n\t\t\t\"min-mz\": %1.3f,\n"
+				 "\t\t\t\"max-mz\": %1.3f,\n"
+				 "\t\t\t\"mid-mz\": %1.3f,\n"
+				 "\t\t\t\"dotProdHist\": %ld,\n"
+				 "\t\t\t\"massDiffHist\": %ld\n"
+				 "\t\t}",	
+				sep, 
+				(double) (i - 100) / 100,
+				(double) (i + 1 - 100) / 100,
+				(double) (i + 0.5 - 100) / 100,
+				dotprodHistogram[i],
+				massDiffHistogram[i]);
+		sep = ',';
+	}
+	fprintf(output, "\n\t]\n}\n");
+
+	if (par->experimentalFeatures == 1) {
+		fprintf(output, "\t\"histogram\": {\n");
+		for (i = 0; i < DOTPROD_HISTOGRAM_BINS; i++) {
+			for (j = 0; j < MASSDIFF_HISTOGRAM_BINS - 1; j++)
+				fprintf(output, "%ld\t", massDiffDotProductHistogram[j][i]);
+			fprintf(output, "%ld\n",
+					massDiffDotProductHistogram[MASSDIFF_HISTOGRAM_BINS - 1][i]);
+		}
+	}
+
+	fclose (output);
+	return 0;
+}
+
 /* compareMS2 main function */
 
 int main(int argc, char *argv[]) {
@@ -886,6 +1050,10 @@ int main(int argc, char *argv[]) {
 		fclose(output);
 	}
 
+    err = writeJSON(&par, &datasetA, &datasetB, &dotprodHistogram[0],
+			&massDiffHistogram[0], massDiffDotProductHistogram, nComparisons,
+			greaterThanCutoff, sAB, sBA, argc, argv);
+
 	/* free memory */
 	printf("done\nfreeing memory...");
 	free(A);
@@ -894,5 +1062,5 @@ int main(int argc, char *argv[]) {
 
 	/* return from main */
 
-	return 0;
+	return err;
 }
