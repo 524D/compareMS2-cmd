@@ -721,6 +721,7 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 
 	FILE *output;
 	long i, j;
+	(void) massDiffHistogram; // unused
 
 	if (strcmp(par->JSONFilename, "") == 0) {
 		return 0;
@@ -795,36 +796,44 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 	fprintf(output, "\t\"n_m/z_bins\": %ld,\n", par->nBins);
 
 	char sep = ' ';
-	fprintf(output, "\t\"histogram\": [");
+	fprintf(output, "\t\"dotProdHistogram\": {\n");
+	fprintf(output, "\t\t\"nrBins\": %d,\n", DOTPROD_HISTOGRAM_BINS); // Superfluous (equal to number of items in "count"): remove?
+	fprintf(output, "\t\t\"dotProdRange\": [-1.0, 1.0],\n");
+	fprintf(output, "\t\t\"count\": [\n\t\t\t");
 	for (i = 0; i < DOTPROD_HISTOGRAM_BINS; i++) {
 		fprintf(output,
-				 "%c\n"
-				 "\t\t{\n\t\t\t\"min-mz\": %1.3f,\n"
-				 "\t\t\t\"max-mz\": %1.3f,\n"
-				 "\t\t\t\"mid-mz\": %1.3f,\n"
-				 "\t\t\t\"dotProdHist\": %ld,\n"
-				 "\t\t\t\"massDiffHist\": %ld\n"
-				 "\t\t}",	
+				"%c %ld",
 				sep, 
-				(double) (i - 100) / 100,
-				(double) (i + 1 - 100) / 100,
-				(double) (i + 0.5 - 100) / 100,
-				dotprodHistogram[i],
-				massDiffHistogram[i]);
+				dotprodHistogram[i]);
 		sep = ',';
 	}
-	fprintf(output, "\n\t]\n}\n");
+	fprintf(output, "\n\t\t]\n");
+	fprintf(output, "\t},\n");
 
 	if (par->experimentalFeatures == 1) {
-		fprintf(output, "\t\"histogram\": {\n");
+		fprintf(output, "\t\"massDiffDotProdHistogram\": {\n");
+		fprintf(output, "\t\t\"mzRange\": [-%1.1f, %1.1f],\n",
+			MASSDIFF_HISTOGRAM_RANGE/2, MASSDIFF_HISTOGRAM_RANGE/2);
+		fprintf(output, "\t\t\"dotProdRange\": [-1.0, 1.0],\n");
+
+		fprintf(output, "\t\t\"count\": [\n");
 		for (i = 0; i < DOTPROD_HISTOGRAM_BINS; i++) {
+			fprintf(output, "\t\t\t[");
 			for (j = 0; j < MASSDIFF_HISTOGRAM_BINS - 1; j++)
-				fprintf(output, "%ld\t", massDiffDotProductHistogram[j][i]);
-			fprintf(output, "%ld\n",
+				fprintf(output, "%ld, ", massDiffDotProductHistogram[j][i]);
+			fprintf(output, "%ld],\n",
 					massDiffDotProductHistogram[MASSDIFF_HISTOGRAM_BINS - 1][i]);
 		}
+		fprintf(output, "\t\t\t[");
+		for (j = 0; j < MASSDIFF_HISTOGRAM_BINS - 1; j++)
+			fprintf(output, "%ld, ", massDiffDotProductHistogram[j][DOTPROD_HISTOGRAM_BINS - 1]);
+		fprintf(output, "%ld]\n\t\t]\n",
+				massDiffDotProductHistogram[MASSDIFF_HISTOGRAM_BINS - 1][DOTPROD_HISTOGRAM_BINS - 1]);
+
 	}
 
+	fprintf(output, "\t}\n");
+	fprintf(output, "}\n");
 	fclose (output);
 	return 0;
 }
