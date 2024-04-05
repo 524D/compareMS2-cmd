@@ -733,7 +733,7 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 
 	fprintf(output, "{\n");
 	// Write command line parameters to JSON file
-	fprintf(output, "\t\"command_line\": \"");
+	fprintf(output, "\t\"commandLine\": \"");
 	for (i = 0; i < argc; i++) {
 		// Escape special JSON characters
 		char *arg = escapeJSON(argv[i]);
@@ -743,57 +743,57 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 	fprintf(output, "\",\n");
 	char *fn;
 	fn = escapeJSON(datasetA->Filename);
-	fprintf(output, "\t\"dataset_A\": \"%s\",\n", fn);
+	fprintf(output, "\t\"datasetA\": \"%s\",\n", fn);
 	free(fn);
 	fn = escapeJSON(datasetB->Filename);
-	fprintf(output, "\t\"dataset_B\": \"%s\",\n", fn);
+	fprintf(output, "\t\"datasetB\": \"%s\",\n", fn);
 	free(fn);
 	if (par->metric == 0) /* original metric */
 	{
 		if (greaterThanCutoff > 0)
-			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+			fprintf(output, "\t\"setDistance\": %1.10f,\n",
 					(double) nComparisons / 2.0 / greaterThanCutoff);
 		if (greaterThanCutoff == 0)
-			fprintf(output, "\t\"set_distance\": \"INF\",\n");
+			fprintf(output, "\t\"setDistance\": \"INF\",\n");
 	}
 	if (par->metric == 1) /* symmetric metric */
 	{
 		if (greaterThanCutoff > 0)
-			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+			fprintf(output, "\t\"setDistance\": %1.10f,\n",
 					(double) (datasetA->Size + datasetB->Size) / greaterThanCutoff);
 		if (greaterThanCutoff == 0)
-			fprintf(output, "\t\"set_distance\": \"INF\",\n");
+			fprintf(output, "\t\"setDistance\": \"INF\",\n");
 	}
 	if (par->metric == 2) /* compareMS2 2.0 symmetric metric */
 	{
 		if ((sAB + sBA) > 0) {
-			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+			fprintf(output, "\t\"setDistance\": %1.10f,\n",
 					1.0
 							/ ((double) sAB / (2 * datasetA->Size)
 									+ (double) sBA / (2 * datasetB->Size)) - 1.0);
 		}
 		if ((sAB + sBA) == 0) { /* distance between sets with no similar spectra */
-			fprintf(output, "\t\"set_distance\": %1.10f,\n",
+			fprintf(output, "\t\"setDistance\": %1.10f,\n",
 					(4.0 * (double) datasetA->Size * datasetB->Size)
 							/ (datasetA->Size + datasetB->Size) - 1.0);
 		}
 	}
-	fprintf(output, "\t\"set_metric\": %i,\n", par->metric);
+	fprintf(output, "\t\"setMetric\": %i,\n", par->metric);
 	fprintf(output,
-			"\t\"scan_range\": [%ld, %ld],\n\t\"max_scan_diff\": %1.2f,\n\t\"max_mz_diff\": %1.4f,\n\t\"scaling_power\": %1.2f,\n\t\"noise_threshold\": %1.1f,\n\t\"min_basepeak_intensity\": %1.2f,\n\t\"min_total_ion_current\": %1.2f,\n",
+			"\t\"scanRange\": [%ld, %ld],\n\t\"maxScanDiff\": %1.2f,\n\t\"maxMzDiff\": %1.4f,\n\t\"scalingPower\": %1.2f,\n\t\"noiseThreshold\": %1.1f,\n\t\"minBasepeakIntensity\": %1.2f,\n\t\"minTotalIonCurrent\": %1.2f,\n",
 			par->startScan, par->endScan, par->maxScanNumberDifference, par->maxPrecursorDifference,
 			par->scaling, par->noise, par->minBasepeakIntensity, par->minTotalIonCurrent);
 	if (par->qc == 0)
-		fprintf(output, "\t\"dataset_A_QC\": %ld,\n", datasetA->Size);
+		fprintf(output, "\t\"datasetAQC\": %ld,\n", datasetA->Size);
 	if (par->qc == 0)
-		fprintf(output, "\t\"dataset_B_QC\": %ld,\n", datasetB->Size);
-	fprintf(output, "\t\"n_gt_cutoff\": %ld,\n", greaterThanCutoff);
-	fprintf(output, "\t\"n_comparisons\": %ld,\n", nComparisons);
-	fprintf(output, "\t\"min_peaks\": %ld,\n", datasetA->Size);
-	fprintf(output, "\t\"max_peaks\": %ld,\n", datasetB->Size);
-	fprintf(output, "\t\"m/z_range\": [%.4f, %.4f]\n,", par->minMz, par->maxMz);
-	fprintf(output, "\t\"m/z_bin_size\": %.4f,\n", par->binSize);
-	fprintf(output, "\t\"n_m/z_bins\": %ld,\n", par->nBins);
+		fprintf(output, "\t\"datasetBQC\": %ld,\n", datasetB->Size);
+	fprintf(output, "\t\"nrGtCutoff\": %ld,\n", greaterThanCutoff);
+	fprintf(output, "\t\"nrComparisons\": %ld,\n", nComparisons);
+	fprintf(output, "\t\"minPeaks\": %ld,\n", datasetA->Size);
+	fprintf(output, "\t\"maxPeaks\": %ld,\n", datasetB->Size);
+	fprintf(output, "\t\"mzRange\": [%.4f, %.4f]\n,", par->minMz, par->maxMz);
+	fprintf(output, "\t\"mzBinSize\": %.4f,\n", par->binSize);
+	fprintf(output, "\t\"nrMzBins\": %ld,\n", par->nBins);
 
 	char sep = ' ';
 	fprintf(output, "\t\"dotProdHistogram\": {\n");
@@ -808,9 +808,9 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 		sep = ',';
 	}
 	fprintf(output, "\n\t\t]\n");
-	fprintf(output, "\t},\n");
 
 	if (par->experimentalFeatures == 1) {
+		fprintf(output, "\t},\n");
 		fprintf(output, "\t\"massDiffDotProdHistogram\": {\n");
 		fprintf(output, "\t\t\"mzRange\": [-%1.1f, %1.1f],\n",
 			MASSDIFF_HISTOGRAM_RANGE/2, MASSDIFF_HISTOGRAM_RANGE/2);
@@ -829,9 +829,7 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 			fprintf(output, "%ld, ", massDiffDotProductHistogram[j][DOTPROD_HISTOGRAM_BINS - 1]);
 		fprintf(output, "%ld]\n\t\t]\n",
 				massDiffDotProductHistogram[MASSDIFF_HISTOGRAM_BINS - 1][DOTPROD_HISTOGRAM_BINS - 1]);
-
 	}
-
 	fprintf(output, "\t}\n");
 	fprintf(output, "}\n");
 	fclose (output);
