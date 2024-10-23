@@ -398,7 +398,7 @@ static int preCheckMGF(ParametersType *par, DatasetType *dataset) {
 				specStatus = IN_RANGE_AND_FIRST_PEAK;
 			}
 			// Check if scan number and RT are in range
-			else if (strspn("SCANS", p) > 4) { /* MGFs with SCANS attributes */
+			else if (strncmp("SCANS", p, 5) == 0) { /* MGFs with SCANS attributes */
 				p = strtok('\0', " \t");
 				scan = (long) atol0(strpbrk(p, "0123456789"));
 				if (scan < par->startScan || scan > par->endScan) {
@@ -412,7 +412,7 @@ static int preCheckMGF(ParametersType *par, DatasetType *dataset) {
 					specStatus = NOT_IN_RANGE;
 				}
 			}
-			else if (strspn("TITLE", p) > 4) { /* msconvert-style MGFs with NativeID and scan= */
+			else if (strncmp("TITLE", p, 5) == 0) { /* msconvert-style MGFs with NativeID and scan= */
 				while (p != NULL) {
 					if (strstr(p, "scan=") != NULL) {
 						scan = (long) atol0(strpbrk(p, "0123456789"));
@@ -423,7 +423,7 @@ static int preCheckMGF(ParametersType *par, DatasetType *dataset) {
 					p = strtok('\0', " \t");
 				}
 			}
-			else if (strspn("RTINSECONDS", p) > 10) { /* MGFs with RTINSECONDS attributes */
+			else if (strncmp("RTINSECONDS", p, 11) == 0) { /* MGFs with RTINSECONDS attributes */
 				rt = atof0(strpbrk(p, "0123456789"));
 				if (rt < par->startRT || rt > par->endRT) {
 					specStatus = NOT_IN_RANGE;
@@ -478,18 +478,18 @@ static int readMGF(ParametersType *par, DatasetType *dataset, SpecType *spec) {
 			}
 			continue;
 		}
-		if (strspn("PEPMASS", p) > 6) {
+		if (strncmp("PEPMASS", p, 7) == 0) {
 			spec[i].precursorMz = atof(strpbrk(p, "0123456789"));
 			spec[i].mz = (double*) alloc_chk(par->peakCount * sizeof(double));
 			spec[i].intensity = (double*) alloc_chk(par->peakCount * sizeof(double));
 			spec[i].bin = (double*) alloc_chk(par->nBins * sizeof(double));
 			continue;
 		}
-		if (strspn("CHARGE", p) > 5) {
+		if (strncmp("CHARGE", p, 6) == 0) {
 			spec[i].charge = (char) atoi(strpbrk(p, "0123456789"));
 			continue;
 		}
-		if (strspn("SCANS", p) > 4) { /* MGFs with SCANS attributes */
+		if (strncmp("SCANS", p, 5) == 0) { /* MGFs with SCANS attributes */
 			p = strtok('\0', " \t");
 			long scan = atol0(strpbrk(p, "0123456789"));
 			spec[i].scan = scan;
@@ -505,7 +505,7 @@ static int readMGF(ParametersType *par, DatasetType *dataset, SpecType *spec) {
 			dataset->ScanNumbersCouldBeRead = 1;
 			continue;
 		}
-		if (strspn("TITLE", p) > 4) { /* msconvert-style MGFs with NativeID and scan= */
+		if (strncmp("TITLE", p, 5) == 0) { /* msconvert-style MGFs with NativeID and scan= */
 			while (p != NULL) {
 				if (strstr(p, "scan=") != NULL) {
 					long scan = atol0(strpbrk(p, "0123456789"));
@@ -517,7 +517,7 @@ static int readMGF(ParametersType *par, DatasetType *dataset, SpecType *spec) {
 			}
 			continue;
 		}
-		if (strspn("RTINSECONDS", p) > 10) { /* MGFs with RTINSECONDS attributes */
+		if (strncmp("RTINSECONDS", p, 11) == 0) { /* MGFs with RTINSECONDS attributes */
 			double rt = atof0(strpbrk(p, "0123456789"));
 			spec[i].rt = rt;
 			// printf("%c[%ld].rt = %ld\n", dataset->id, i, spec[i]->scan);
