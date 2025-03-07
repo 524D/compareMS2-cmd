@@ -1,3 +1,4 @@
+# To run this workflow, go to https://github.com/524D/compareMS2-cmd/settings/actions and enable "Read and write permissions" before build (and disable afterwards)
 name: build-binaries
 on:
   workflow_dispatch:
