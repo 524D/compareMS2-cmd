@@ -12,7 +12,7 @@
 #include <string.h>
 
 #define MAX_LINE 2048 // Maximum line of a line in input files
-#define MAX_PATH ((MAX_LINE)-20) // Maxumum length of path names
+#define MAX_PATH ((MAX_LINE) - 20) // Maximum length of path names
 #define MAX_SAMPLE_NAME 256
 #define MAX_SHORT_SAMPLE_NAME 256
 #define MAX_SAMPLES 120
@@ -86,7 +86,7 @@ static int species_name_to_idx(const char* species_name, species_t* species)
 // Add a new sample to species entry
 // return the index of the species
 static int add_sample_species(const char* sample_name,
-    const char* species_name, species_t* species)
+	const char* species_name, species_t* species)
 {
 	int i = species_name_to_idx(species_name, species);
 
@@ -228,7 +228,7 @@ static int create_nexus(char* output_filename_stem, double* distance, species_t*
 	long i, j;
 	char output_filename[MAX_PATH];
 	FILE* output_file;
-    long n_species = get_n_species(species);
+	long n_species = get_n_species(species);
 
 	printf("writing distance matrix in NEXUS format...");
 
@@ -253,10 +253,10 @@ static int create_nexus(char* output_filename_stem, double* distance, species_t*
 	fprintf(output_file, "   DIMENSIONS ntax=%li;\n", n_species);
 	fprintf(output_file, "   TAXLABELS");
 	for (i = 0; i < species->nr_species; i++) {
-        if (species->s2s[i].species_used) {
-	    	fprintf(output_file, "   %s", species->s2s[i].species_name);
-        }
-    }
+		if (species->s2s[i].species_used) {
+			fprintf(output_file, "   %s", species->s2s[i].species_name);
+		}
+	}
 	fprintf(output_file, ";\nEND;\n\n");
 	fprintf(output_file, "BEGIN distances;\n");
 	fprintf(output_file, "   DIMENSIONS ntax=%li;\n", n_species);
@@ -300,7 +300,7 @@ static int create_nexus(char* output_filename_stem, double* distance, species_t*
 }
 
 static int create_mega(char* output_filename_stem, double* distance, species_t* species,
-    double cutoff, double* qc_value, int* qc_samples)
+	double cutoff, double* qc_value, int* qc_samples)
 {
 	long i, x, y;
 	char output_filename[MAX_PATH];
@@ -356,7 +356,7 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 int main(int argc, char* argv[])
 {
 	FILE* input_file;
-	char input_filename[MAX_PATH], output_filename_stem[MAX_PATH], sample_species_mapping_filename[MAX_PATH], format, *p, line[MAX_LINE], **comparison, **X, **Y, **sample_name, **short_sample_name, **species_name, use_mapping = 0, metric = 0;
+	char input_filename[MAX_PATH], output_filename_stem[MAX_PATH], sample_species_mapping_filename[MAX_PATH], format, *p, line[MAX_LINE], **comparison, **X, **Y, **sample_name, **species_name, use_mapping = 0, metric = 0;
 	long i, a, b, x, y, n_comparisons;
 	double cutoff;
 
@@ -431,9 +431,6 @@ int main(int argc, char* argv[])
 	sample_name = (char**)alloc_chk(MAX_SAMPLES * sizeof(char*));
 	for (i = 0; i < MAX_SAMPLES; i++)
 		sample_name[i] = (char*)alloc_chk(MAX_SAMPLE_NAME * sizeof(char));
-	short_sample_name = (char**)alloc_chk(MAX_SAMPLES * sizeof(char*));
-	for (i = 0; i < MAX_SAMPLES; i++)
-		short_sample_name[i] = (char*)alloc_chk(MAX_SHORT_SAMPLE_NAME * sizeof(char));
 	species_name = (char**)alloc_chk(MAX_SPECIES * sizeof(char*));
 	for (i = 0; i < MAX_SPECIES; i++)
 		species_name[i] = (char*)alloc_chk(MAX_SHORT_SAMPLE_NAME * sizeof(char));
@@ -442,14 +439,14 @@ int main(int argc, char* argv[])
 	// We don't know the actual needed size yet, because multiple
 	// samples can belong to the same species (from the sample-to-species file),
 	// also the sample-to-species files may be missing, over-or under complete.
-    // allocate data for each element.
+	// allocate data for each element.
 	// We will convert the x,y coordinate to a single array index like:
 	// index = ((y-1)*y)/2 + x  where y>x.
 	// For a lower left half matrix this index is unique and ranges from 0 to then number
 	// matrix elements.
 
-    // FIXME: We allocate too much memory, because the implementation uses a
-    // "sparse matrix", where only species that have data are filled, but we
+	// FIXME: We allocate too much memory, because the implementation uses a
+	// "sparse matrix", where only species that have data are filled, but we
 
 	int max_distances = n_comparisons + (species.nr_species * species.nr_species / 2);
 	double* distance = (double*)alloc_chk(max_distances * sizeof(double));
