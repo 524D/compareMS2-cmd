@@ -108,11 +108,29 @@ static int sample_name_to_species_index(char* sample_name, species_t* species)
 {
 	int i, j;
 
+	// The sample-to-species name only contains the basename of the sample file
+	// Get basename of sample file name
+	char* basename = strrchr(sample_name, '/');
+	if (basename == NULL) {
+		// If this software in compiled for Windows, also check backslash as separator
+#ifdef _WIN32
+		basename = strrchr(sample_name, '\\');
+		if (basename == NULL) {
+			basename = sample_name;
+		} else {
+			basename++;
+		}
+#else
+		basename = sample_name;
+#endif
+	} else {
+		basename++;
+	}
 	sample_to_species_t* s2s;
 	for (i = 0; i < species->nr_species; i++) {
 		s2s = &species->s2s[i];
 		for (j = 0; j < s2s->nr_sample_names; j++) {
-			if (strcmp(s2s->sample_names[j], sample_name) == 0) {
+			if (strcmp(s2s->sample_names[j], basename) == 0) {
 				s2s->species_used = 1;
 				return i;
 			}
@@ -120,8 +138,8 @@ static int sample_name_to_species_index(char* sample_name, species_t* species)
 	}
 	s2s = &species->s2s[species->nr_species];
 	// Not found, make new "species" from sample name
-	s2s->species_name = strdup_chk(sample_name);
-	// Remove extension from copies sample name
+	s2s->species_name = strdup_chk(basename);
+	// Remove extension from copied sample name
 	// Lookup last dot in filename
 	i = strlen(s2s->species_name);
 	while ((i > 0) && (s2s->species_name[i] != '.'))
@@ -131,7 +149,7 @@ static int sample_name_to_species_index(char* sample_name, species_t* species)
 
 	// This species only contains one sample name, allocate array with one element
 	s2s->sample_names = alloc_chk(sizeof(char*));
-	s2s->sample_names[0] = strdup_chk(sample_name);
+	s2s->sample_names[0] = strdup_chk(basename);
 	s2s->nr_sample_names = 1;
 	s2s->species_used = 1;
 	i = species->nr_species;
