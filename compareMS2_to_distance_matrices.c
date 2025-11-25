@@ -324,7 +324,7 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 	char output_filename[MAX_PATH];
 	FILE* output_file;
 
-	printf("writing distance matrix in MEGA format...\n");
+	printf("writing distance matrix in MEGA version < 12 format...\n");
 
 	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
 	strcpy(output_filename, output_filename_stem);
@@ -370,6 +370,94 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 	return 0;
 }
 
+// Create MEGA format version 12 distance matrix
+static int create_mega12(char* output_filename_stem, double* distance, species_t* species,
+	double cutoff, double* qc_value, int* qc_samples)
+{
+	long i, x, y, species_idx;
+	char output_filename[MAX_PATH];
+	FILE* output_file;
+	long n_species = get_n_species(species);
+
+	printf("writing distance matrix in MEGA 12 format...\n");
+
+	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
+	strcpy(output_filename, output_filename_stem);
+	strcat(output_filename, "_distance_matrix.meg");
+	if ((output_file = fopen(output_filename, "w")) == NULL) {
+		printf("error opening output file %s for writing", output_filename);
+		return -1;
+	}
+
+	fprintf(output_file, "#mega\n");
+	fprintf(output_file, "!Title: %s;\n", output_filename_stem);
+	fprintf(output_file, "!Format DataType=Distance DataFormat=LowerLeft NTaxa=%ld;\n", n_species);
+	fprintf(output_file, "!Description\n");
+	fprintf(output_file, "  No. of Groups : %ld\n", n_species);
+	fprintf(output_file, "  Cutoff : %.4f\n", cutoff);
+	fprintf(output_file, ";\n\n");
+
+	// Output numbered species list
+	species_idx = 1;
+	for (i = 0; i < species->nr_species; i++) {
+		if (species->s2s[i].species_used) {
+			fprintf(output_file, "[%ld] #%s", species_idx, species->s2s[i].species_name);
+			if (qc_samples[i] > 0) {
+				fprintf(output_file, " (QC: %.3f)", qc_value[i] / (double)qc_samples[i]);
+			}
+			fprintf(output_file, "\n");
+			species_idx++;
+		}
+	}
+	fprintf(output_file, "\n");
+
+	// Output column header with species numbers
+	fprintf(output_file, "[");
+	species_idx = 1;
+	for (i = 0; i < species->nr_species; i++) {
+		if (species->s2s[i].species_used) {
+			fprintf(output_file, "%7ld", species_idx);
+			species_idx++;
+		}
+	}
+	fprintf(output_file, " ]\n");
+
+	// Output distance matrix with row numbers
+	species_idx = 1;
+	for (y = 0; y < species->nr_species; y++) {
+		if (species->s2s[y].species_used) {
+			fprintf(output_file, "[%ld] ", species_idx);
+			long col_idx = 1;
+			for (x = 0; x < species->nr_species; x++) {
+				if (species->s2s[x].species_used) {
+					if (x < y) {
+						// Lower triangular part - output distance
+						fprintf(output_file, "%7.3f", distance[distance_index(x, y)]);
+					} else if (x == y) {
+						// Diagonal - leave empty (just spaces)
+						fprintf(output_file, "       ");
+					} else {
+						// Upper triangular part - leave empty
+						fprintf(output_file, "       ");
+					}
+					col_idx++;
+				}
+			}
+			fprintf(output_file, "\n");
+			species_idx++;
+		}
+	}
+	fprintf(output_file, "\n");
+
+	fclose(output_file);
+	return 0;
+}
+
+static void usage()
+{
+	printf("usage: compareMS2_to_distance_matrices -i <list of compareMS2 results files> -o <output file stem> [-x <sample to species mapping> -c <score cutoff> -m]\n");
+}
+
 /* main starts here */
 int main(int argc, char* argv[])
 {
@@ -386,14 +474,15 @@ int main(int argc, char* argv[])
 	/* parsing command line parameters */
 	if ((argc == 2) && ((strcmp(argv[1], "--help") == 0) || (strcmp(argv[1], "-help") == 0) || (strcmp(argv[1], "-h") == 0))) /* want help? */
 	{
-		printf("compareMS2_to_distance_matrices - (c) Magnus Palmblad 2010-\n\nusage: compareMS2_to_distance_matrices -i <list of compareMS2 results files> -o <output file stem> [-x <sample to species mapping> -c <score cutoff> -m]\n");
+		printf("compareMS2_to_distance_matrices - (c) Magnus Palmblad 2010-\n\n");
+		usage();
 		return 0;
 	}
 
 	/* test for correct number of parameters */
 
 	if (argc < 3) {
-		printf("usage: compareMS2_to_distance_matrices -i <list of compareMS2 results files> -o <output file stem> [-x <sample to species mapping> -c <score cutoff>] (type compareMS2_to_distance_matrices --help for more information)\n");
+		usage();
 		return -1;
 	}
 
@@ -413,7 +502,10 @@ int main(int argc, char* argv[])
 			format = 0;
 		} /* NEXUS = default */
 		if ((argv[i][0] == '-') && (argv[i][1] == 'm')) {
-			format = 1; /* MEGA */
+			if ((strlen(argv[i]) > 1) && (argv[i][2] == '2'))
+				format = 2; /* MEGA version 12+ */
+			else
+				format = 1; /* MEGA version <12 */
 		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'c'))
 			cutoff = atof(&argv[strlen(argv[i]) > 2 ? i : i + 1][strlen(argv[i]) > 2 ? 2 : 0]);
@@ -543,15 +635,20 @@ int main(int argc, char* argv[])
 			distance[i] /= (double)distance_samples[i];
 		}
 	}
-
-	if (format == 0) /* NEXUS format (default) */
-	{
+	switch (format) {
+	case 0: /* NEXUS format (default) */
 		rv = create_nexus(output_filename_stem, distance, &species, metric);
-	}
-
-	if (format == 1) /* MEGA format */
-	{
+		break;
+	case 1: /* MEGA format */
 		rv = create_mega(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
+		break;
+	case 2: /* MEGA format version 12+ */
+		rv = create_mega12(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
+		break;
+	default:
+		fprintf(stderr, "Unknown output format: %d\n", format);
+		rv = -1;
+		break;
 	}
 	/* return from main */
 
