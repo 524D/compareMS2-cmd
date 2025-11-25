@@ -370,9 +370,29 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 	return 0;
 }
 
+// Fix the Taxonomy name for MEGA
+// From the MEGA manual:
+// Taxa labels must start with alphanumeric characters (0-9, a-z, and A-Z) or a special character:
+//   dash (-), plus (+) or period (.). After the first character, taxa labels may contain the following
+//   additional special characters: underscore (_), asterisk (*), colon (:), round open and close
+//   brackets ( ), vertical line (|), back slash (\), and forward slash (/).
+static void fix_taxonomy_name(char* name)
+{
+	size_t i;
+	// First character
+	if (!isalnum(name[0]) && (name[0] != '-') && (name[0] != '+') && (name[0] != '.')) {
+		name[0] = '_';
+	}
+	// Remaining characters
+	for (i = 1; i < strlen(name); i++) {
+		if (!isalnum(name[i]) && (name[i] != '-') && (name[i] != '+') && (name[i] != '.') && (name[i] != '_') && (name[i] != '*') && (name[i] != ':') && (name[i] != '(') && (name[i] != ')') && (name[i] != '|') && (name[i] != '\\') && (name[i] != '/')) {
+			name[i] = '_';
+		}
+	}
+}
+
 // Create MEGA format version 12 distance matrix
-static int create_mega12(char* output_filename_stem, double* distance, species_t* species,
-	double cutoff, double* qc_value, int* qc_samples)
+static int create_mega12(char* output_filename_stem, double* distance, species_t* species, double cutoff)
 {
 	long i, x, y, species_idx;
 	char output_filename[MAX_PATH];
@@ -383,7 +403,7 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 
 	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix.meg");
+	strcat(output_filename, "_distance_matrix_12.meg");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
@@ -401,11 +421,8 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 	species_idx = 1;
 	for (i = 0; i < species->nr_species; i++) {
 		if (species->s2s[i].species_used) {
-			fprintf(output_file, "[%ld] #%s", species_idx, species->s2s[i].species_name);
-			if (qc_samples[i] > 0) {
-				fprintf(output_file, " (QC: %.3f)", qc_value[i] / (double)qc_samples[i]);
-			}
-			fprintf(output_file, "\n");
+			fix_taxonomy_name(species->s2s[i].species_name);
+			fprintf(output_file, "[%ld] #%s\n", species_idx, species->s2s[i].species_name);
 			species_idx++;
 		}
 	}
@@ -416,7 +433,7 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 	species_idx = 1;
 	for (i = 0; i < species->nr_species; i++) {
 		if (species->s2s[i].species_used) {
-			fprintf(output_file, "%7ld", species_idx);
+			fprintf(output_file, "%9ld", species_idx);
 			species_idx++;
 		}
 	}
@@ -432,13 +449,12 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 				if (species->s2s[x].species_used) {
 					if (x < y) {
 						// Lower triangular part - output distance
-						fprintf(output_file, "%7.3f", distance[distance_index(x, y)]);
+						fprintf(output_file, "%9.5f", distance[distance_index(x, y)]);
 					} else if (x == y) {
 						// Diagonal - leave empty (just spaces)
-						fprintf(output_file, "       ");
+						fprintf(output_file, "         ");
 					} else {
 						// Upper triangular part - leave empty
-						fprintf(output_file, "       ");
 					}
 					col_idx++;
 				}
@@ -655,7 +671,7 @@ int main(int argc, char* argv[])
 		rv = create_mega(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
 		break;
 	case 2: /* MEGA format version 12+ */
-		rv = create_mega12(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
+		rv = create_mega12(output_filename_stem, distance, &species, cutoff);
 		break;
 	default:
 		fprintf(stderr, "Unknown output format: %d\n", format);
