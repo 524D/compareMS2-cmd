@@ -455,7 +455,19 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 
 static void usage()
 {
-	printf("usage: compareMS2_to_distance_matrices -i <list of compareMS2 results files> -o <output file stem> [-x <sample to species mapping> -c <score cutoff> -m]\n");
+	printf("usage: compareMS2_to_distance_matrices -i <input file> -o <output stem> [options]\n\n");
+	printf("Required arguments:\n");
+	printf("  -i <file>    List of compareMS2 results files to process\n");
+	printf("  -o <stem>    Output file stem (output filename without extension)\n\n");
+	printf("Optional arguments:\n");
+	printf("  -x <file>    Sample to species mapping file\n");
+	printf("  -c <value>   Score cutoff (default: 0.80)\n");
+	printf("  -n           Output in NEXUS format (default)\n");
+	printf("  -m           Output in MEGA format (version < 12)\n");
+	printf("  -m2          Output in MEGA format (version 12+)\n");
+	printf("  -h, --help   Display this help message\n\n");
+	printf("Example:\n");
+	printf("  compareMS2_to_distance_matrices -i filelist.txt -o results -x mapping.txt -c 0.85 -m2\n");
 }
 
 /* main starts here */
@@ -474,7 +486,7 @@ int main(int argc, char* argv[])
 	/* parsing command line parameters */
 	if ((argc == 2) && ((strcmp(argv[1], "--help") == 0) || (strcmp(argv[1], "-help") == 0) || (strcmp(argv[1], "-h") == 0))) /* want help? */
 	{
-		printf("compareMS2_to_distance_matrices - (c) Magnus Palmblad 2010-\n\n");
+		printf("compareMS2_to_distance_matrices - (c) Magnus Palmblad\n\n");
 		usage();
 		return 0;
 	}
