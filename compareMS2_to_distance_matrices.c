@@ -226,7 +226,7 @@ static int get_n_species(species_t* species)
 	int n_species = 0;
 
 	for (i = 0; i < species->nr_species; i++) {
-		if (species->s2s->species_used != 0) {
+		if (species->s2s[i].species_used != 0) {
 			n_species++;
 		}
 	}
@@ -433,7 +433,7 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 	species_idx = 1;
 	for (i = 0; i < species->nr_species; i++) {
 		if (species->s2s[i].species_used) {
-			fprintf(output_file, "%9ld", species_idx);
+			fprintf(output_file, "%9ld ", species_idx);
 			species_idx++;
 		}
 	}
@@ -449,10 +449,10 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 				if (species->s2s[x].species_used) {
 					if (x < y) {
 						// Lower triangular part - output distance
-						fprintf(output_file, "%9.5f", distance[distance_index(x, y)]);
+						fprintf(output_file, "%9.5f ", distance[distance_index(x, y)]);
 					} else if (x == y) {
 						// Diagonal - leave empty (just spaces)
-						fprintf(output_file, "         ");
+						fprintf(output_file, "          ");
 					} else {
 						// Upper triangular part - leave empty
 					}
