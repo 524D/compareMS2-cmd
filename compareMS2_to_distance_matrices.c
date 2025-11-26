@@ -370,6 +370,82 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 	return 0;
 }
 
+static int create_json(char* output_filename_stem, double* distance, species_t* species,
+	double cutoff, double* qc_value, int* qc_samples)
+{
+	long i, x, y;
+	char output_filename[MAX_PATH];
+	FILE* output_file;
+	int first_species, first_distance;
+
+	printf("writing distance matrix in JSON format...\n");
+
+	/* output distance matrix file in JSON format */
+	strcpy(output_filename, output_filename_stem);
+	strcat(output_filename, "_distance_matrix.json");
+	if ((output_file = fopen(output_filename, "w")) == NULL) {
+		printf("error opening output file %s for writing", output_filename);
+		return -1;
+	}
+
+	fprintf(output_file, "{\n");
+	fprintf(output_file, "  \"distanceMatrix\": {\n");
+	fprintf(output_file, "    \"title\": \"%s\",\n", output_filename_stem);
+	fprintf(output_file, "    \"cutoff\": %.4f,\n", cutoff);
+
+	// Output species and QC values
+	fprintf(output_file, "    \"species\": [\n");
+	first_species = 1;
+	for (i = 0; i < species->nr_species; i++) {
+		if (species->s2s[i].species_used) {
+			if (!first_species) {
+				fprintf(output_file, ",\n");
+			}
+			fprintf(output_file, "      {\n");
+			fprintf(output_file, "        \"name\": \"%s\",\n", species->s2s[i].species_name);
+			fprintf(output_file, "        \"qc\": %.3f\n", qc_value[i] / (double)qc_samples[i]);
+			fprintf(output_file, "      }");
+			first_species = 0;
+		}
+	}
+	fprintf(output_file, "\n    ],\n");
+
+	// Output distance matrix
+	fprintf(output_file, "    \"distances\": [\n");
+	first_species = 1;
+	for (y = 1; y < species->nr_species; y++) {
+		if (species->s2s[y].species_used) {
+			int any_out = 0;
+			if (!first_species) {
+				fprintf(output_file, ",\n");
+			}
+			fprintf(output_file, "      [");
+			first_distance = 1;
+			for (x = 0; x < y; x++) {
+				if (species->s2s[x].species_used) {
+					if (!first_distance) {
+						fprintf(output_file, ", ");
+					}
+					fprintf(output_file, "%.5f", distance[distance_index(x, y)]);
+					any_out = 1;
+					first_distance = 0;
+				}
+			}
+			if (any_out) {
+				fprintf(output_file, "]");
+				first_species = 0;
+			}
+		}
+	}
+	fprintf(output_file, "\n    ]\n");
+
+	fprintf(output_file, "  }\n");
+	fprintf(output_file, "}\n");
+
+	fclose(output_file);
+	return 0;
+}
+
 // Fix the Taxonomy name for MEGA
 // From the MEGA manual:
 // Taxa labels must start with alphanumeric characters (0-9, a-z, and A-Z) or a special character:
@@ -481,6 +557,7 @@ static void usage()
 	printf("  -n           Output in NEXUS format (default)\n");
 	printf("  -m           Output in MEGA format (version < 12)\n");
 	printf("  -m2          Output in MEGA format (version 12+)\n");
+	printf("  -J           Output in JSON format\n");
 	printf("  -h, --help   Display this help message\n\n");
 	printf("Example:\n");
 	printf("  compareMS2_to_distance_matrices -i filelist.txt -o results -x mapping.txt -c 0.85 -m2\n");
@@ -516,7 +593,7 @@ int main(int argc, char* argv[])
 
 	/* read and replace parameter values */
 	cutoff = 0.80;
-	format = 0; /* 0=NEXUS, 1=MEGA */
+	format = 0; /* 0=NEXUS, 1=MEGA, 2=MEGA12, 3=JSON */
 	for (i = 1; i < argc; i++) {
 		if ((argv[i][0] == '-') && (argv[i][1] == 'i'))
 			strcpy(input_filename, &argv[strlen(argv[i]) > 2 ? i : i + 1][strlen(argv[i]) > 2 ? 2 : 0]);
@@ -534,6 +611,9 @@ int main(int argc, char* argv[])
 				format = 2; /* MEGA version 12+ */
 			else
 				format = 1; /* MEGA version <12 */
+		}
+		if ((argv[i][0] == '-') && (argv[i][1] == 'J')) {
+			format = 3; /* JSON */
 		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'c'))
 			cutoff = atof(&argv[strlen(argv[i]) > 2 ? i : i + 1][strlen(argv[i]) > 2 ? 2 : 0]);
@@ -672,6 +752,9 @@ int main(int argc, char* argv[])
 		break;
 	case 2: /* MEGA format version 12+ */
 		rv = create_mega12(output_filename_stem, distance, &species, cutoff);
+		break;
+	case 3: /* JSON format */
+		rv = create_json(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
 		break;
 	default:
 		fprintf(stderr, "Unknown output format: %d\n", format);
