@@ -467,11 +467,12 @@ static int create_json(char* output_filename_stem, double* distance, species_t* 
 			if (!first_species) {
 				fprintf(output_file, ",\n");
 			}
-			fprintf(output_file, "      [");
 			first_distance = 1;
 			for (x = 0; x < y; x++) {
 				if (species->s2s[x].species_used) {
-					if (!first_distance) {
+					if (first_distance) {
+						fprintf(output_file, "      [");
+					} else {
 						fprintf(output_file, ", ");
 					}
 					fprintf(output_file, "%.5f", distance[distance_index(x, y)]);
