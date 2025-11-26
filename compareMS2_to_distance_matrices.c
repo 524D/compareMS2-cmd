@@ -248,7 +248,7 @@ static int create_nexus(char* output_filename_stem, double* distance, species_t*
 	FILE* output_file;
 	long n_species = get_n_species(species);
 
-	printf("writing distance matrix in NEXUS format...");
+	printf("writing distance matrix in NEXUS format...\n");
 
 	strcpy(output_filename, output_filename_stem);
 	strcat(output_filename, "_distance_matrix.nexus");
@@ -527,7 +527,7 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 
 	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix_12.meg");
+	strcat(output_filename, "_distance_matrix.meg");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
@@ -808,7 +808,15 @@ int main(int argc, char* argv[])
 		if (result != 0) rv = result;
 	}
 	if (format & 4) { /* MEGA format version 12+ */
-		int result = create_mega12(output_filename_stem, distance, &species, cutoff);
+		/* When both MEGA and MEGA12 are requested, add "_MEGA_12_" to the output filename stem */
+		char* output_filename_stem12 = output_filename_stem;
+		char output_filename_stem12_buf[MAX_PATH + 9];
+		if (format & 2) {
+			strcpy(output_filename_stem12_buf, output_filename_stem);
+			strcat(output_filename_stem12_buf, "_MEGA_12_");
+			output_filename_stem12 = output_filename_stem12_buf;
+		}
+		int result = create_mega12(output_filename_stem12, distance, &species, cutoff);
 		if (result != 0) rv = result;
 	}
 	if (format & 8) { /* JSON format */
