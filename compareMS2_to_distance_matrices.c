@@ -370,6 +370,50 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 	return 0;
 }
 
+// Helper function to write JSON-escaped string to file
+// Escapes: " \ / \b \f \n \r \t and control characters
+static void write_json_string(FILE* file, const char* str)
+{
+	const char* p = str;
+	while (*p) {
+		switch (*p) {
+		case '"':
+			fprintf(file, "\\\"");
+			break;
+		case '\\':
+			fprintf(file, "\\\\");
+			break;
+		case '/':
+			fprintf(file, "\\/");
+			break;
+		case '\b':
+			fprintf(file, "\\b");
+			break;
+		case '\f':
+			fprintf(file, "\\f");
+			break;
+		case '\n':
+			fprintf(file, "\\n");
+			break;
+		case '\r':
+			fprintf(file, "\\r");
+			break;
+		case '\t':
+			fprintf(file, "\\t");
+			break;
+		default:
+			if ((unsigned char)*p < 0x20) {
+				// Control characters
+				fprintf(file, "\\u%04x", (unsigned char)*p);
+			} else {
+				fputc(*p, file);
+			}
+			break;
+		}
+		p++;
+	}
+}
+
 static int create_json(char* output_filename_stem, double* distance, species_t* species,
 	double cutoff, double* qc_value, int* qc_samples)
 {
@@ -390,7 +434,9 @@ static int create_json(char* output_filename_stem, double* distance, species_t* 
 
 	fprintf(output_file, "{\n");
 	fprintf(output_file, "  \"distanceMatrix\": {\n");
-	fprintf(output_file, "    \"title\": \"%s\",\n", output_filename_stem);
+	fprintf(output_file, "    \"title\": \"");
+	write_json_string(output_file, output_filename_stem);
+	fprintf(output_file, "\",\n");
 	fprintf(output_file, "    \"cutoff\": %.4f,\n", cutoff);
 
 	// Output species and QC values
@@ -402,7 +448,9 @@ static int create_json(char* output_filename_stem, double* distance, species_t* 
 				fprintf(output_file, ",\n");
 			}
 			fprintf(output_file, "      {\n");
-			fprintf(output_file, "        \"name\": \"%s\",\n", species->s2s[i].species_name);
+			fprintf(output_file, "        \"name\": \"");
+			write_json_string(output_file, species->s2s[i].species_name);
+			fprintf(output_file, "\",\n");
 			fprintf(output_file, "        \"qc\": %.3f\n", qc_value[i] / (double)qc_samples[i]);
 			fprintf(output_file, "      }");
 			first_species = 0;
