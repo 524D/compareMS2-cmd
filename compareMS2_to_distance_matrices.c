@@ -602,13 +602,15 @@ static void usage()
 	printf("Optional arguments:\n");
 	printf("  -x <file>    Sample to species mapping file\n");
 	printf("  -c <value>   Score cutoff (default: 0.80)\n");
-	printf("  -n           Output in NEXUS format (default)\n");
+	printf("  -n           Output in NEXUS format (default if no format specified)\n");
 	printf("  -m           Output in MEGA format (version < 12)\n");
 	printf("  -m2          Output in MEGA format (version 12+)\n");
 	printf("  -J           Output in JSON format\n");
 	printf("  -h, --help   Display this help message\n\n");
-	printf("Example:\n");
-	printf("  compareMS2_to_distance_matrices -i filelist.txt -o results -x mapping.txt -c 0.85 -m2\n");
+	printf("Note: Multiple format flags can be combined to generate multiple outputs.\n\n");
+	printf("Examples:\n");
+	printf("  compareMS2_to_distance_matrices -i filelist.txt -o results -m2\n");
+	printf("  compareMS2_to_distance_matrices -i filelist.txt -o results -m2 -J\n");
 }
 
 /* main starts here */
@@ -641,7 +643,7 @@ int main(int argc, char* argv[])
 
 	/* read and replace parameter values */
 	cutoff = 0.80;
-	format = 0; /* 0=NEXUS, 1=MEGA, 2=MEGA12, 3=JSON */
+	format = 0; /* bitmask: 1=NEXUS, 2=MEGA, 4=MEGA12, 8=JSON */
 	for (i = 1; i < argc; i++) {
 		if ((argv[i][0] == '-') && (argv[i][1] == 'i'))
 			strcpy(input_filename, &argv[strlen(argv[i]) > 2 ? i : i + 1][strlen(argv[i]) > 2 ? 2 : 0]);
@@ -652,19 +654,24 @@ int main(int argc, char* argv[])
 			use_mapping = 1;
 		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'n')) {
-			format = 0;
-		} /* NEXUS = default */
+			format |= 1; /* NEXUS */
+		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'm')) {
 			if ((strlen(argv[i]) > 1) && (argv[i][2] == '2'))
-				format = 2; /* MEGA version 12+ */
+				format |= 4; /* MEGA version 12+ */
 			else
-				format = 1; /* MEGA version <12 */
+				format |= 2; /* MEGA version <12 */
 		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'J')) {
-			format = 3; /* JSON */
+			format |= 8; /* JSON */
 		}
 		if ((argv[i][0] == '-') && (argv[i][1] == 'c'))
 			cutoff = atof(&argv[strlen(argv[i]) > 2 ? i : i + 1][strlen(argv[i]) > 2 ? 2 : 0]);
+	}
+
+	/* If no format specified, default to NEXUS */
+	if (format == 0) {
+		format = 1;
 	}
 
 	printf("reading list of compareMS2 results files...");
@@ -791,23 +798,22 @@ int main(int argc, char* argv[])
 			distance[i] /= (double)distance_samples[i];
 		}
 	}
-	switch (format) {
-	case 0: /* NEXUS format (default) */
-		rv = create_nexus(output_filename_stem, distance, &species, metric);
-		break;
-	case 1: /* MEGA format */
-		rv = create_mega(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
-		break;
-	case 2: /* MEGA format version 12+ */
-		rv = create_mega12(output_filename_stem, distance, &species, cutoff);
-		break;
-	case 3: /* JSON format */
-		rv = create_json(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
-		break;
-	default:
-		fprintf(stderr, "Unknown output format: %d\n", format);
-		rv = -1;
-		break;
+	/* Generate output in requested formats */
+	if (format & 1) { /* NEXUS format */
+		int result = create_nexus(output_filename_stem, distance, &species, metric);
+		if (result != 0) rv = result;
+	}
+	if (format & 2) { /* MEGA format */
+		int result = create_mega(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
+		if (result != 0) rv = result;
+	}
+	if (format & 4) { /* MEGA format version 12+ */
+		int result = create_mega12(output_filename_stem, distance, &species, cutoff);
+		if (result != 0) rv = result;
+	}
+	if (format & 8) { /* JSON format */
+		int result = create_json(output_filename_stem, distance, &species, cutoff, qc_value, qc_samples);
+		if (result != 0) rv = result;
 	}
 	/* return from main */
 
