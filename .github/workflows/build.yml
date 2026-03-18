@@ -18,7 +18,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Build
         run: gcc -Wall -Wextra -O2 compareMS2.c -lm -o compareMS2 && gcc -Wall -Wextra -O2 compareMS2_to_distance_matrices.c -lm -o compareMS2_to_distance_matrices
       - name: Commit files
@@ -39,7 +39,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: Build
         run: gcc -Wall -Wextra -O2 compareMS2.c -lm -o compareMS2.exe && strip compareMS2.exe && gcc -Wall -Wextra -O2 compareMS2_to_distance_matrices.c -lm -o compareMS2_to_distance_matrices.exe && strip compareMS2_to_distance_matrices.exe
       - name: Commit files
@@ -60,7 +60,7 @@ jobs:
     runs-on: "macos-latest"
     steps:
       - name: Checkout
-        uses: actions/checkout@v1
+        uses: actions/checkout@v6
       - name:
           Build
           # Git doesn't preserve file times, so make doesn't work as intended
