@@ -789,8 +789,8 @@ static int writeJSON(ParametersType *par, DatasetType *datasetA, DatasetType *da
 		fprintf(output, "\t\"datasetBQC\": %ld,\n", datasetB->Size);
 	fprintf(output, "\t\"nrGtCutoff\": %ld,\n", greaterThanCutoff);
 	fprintf(output, "\t\"nrComparisons\": %ld,\n", nComparisons);
-	fprintf(output, "\t\"minPeaks\": %ld,\n", datasetA->Size);
-	fprintf(output, "\t\"maxPeaks\": %ld,\n", datasetB->Size);
+	fprintf(output, "\t\"minPeaks\": %ld,\n", par->minPeaks);
+	fprintf(output, "\t\"maxPeaks\": %ld,\n", par->peakCount);
 	fprintf(output, "\t\"mzRange\": [%.4f, %.4f]\n,", par->minMz, par->maxMz);
 	fprintf(output, "\t\"mzBinSize\": %.4f,\n", par->binSize);
 	fprintf(output, "\t\"nrMzBins\": %ld,\n", par->nBins);
