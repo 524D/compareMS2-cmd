@@ -85,7 +85,6 @@ The compareMS2 CLI has a small number of parameters, which are:
 -w *maximum scan number difference*  
 -r *maximum retention time difference*  
 -p *maximum difference in precursor mass*  
--e *maximum precursor mass measurement error*  
 -s *intensity scaling before dot product*  
 -n *noise threshold for dot product*  
 -d *version of set distance metric*  
