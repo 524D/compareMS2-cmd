@@ -21,6 +21,7 @@ import (
 )
 
 // SampleToSpecies represents a species with its associated samples
+// For samples that are not mapped to a species, the sample name is used as the species name
 type SampleToSpecies struct {
 	SpeciesName string
 	SampleNames []string
@@ -45,6 +46,9 @@ type QCData struct {
 	Value   float64
 	Samples int
 }
+
+// DistanceMatrix is a 2D map storing distance data between species pairs
+type DistanceMatrix map[int]map[int]DistanceData
 
 // ComparisonResult for JSON parsing
 type ComparisonResult struct {
@@ -183,14 +187,8 @@ func (s *Species) usedIndices() []int {
 	return indices
 }
 
-// Calculate distance matrix index for lower triangular matrix
-// where x < y
-func distanceIndex(x, y int) int {
-	return ((y-1)*y)/2 + x
-}
-
 // Create NEXUS format output
-func createNexus(outputStem string, distances map[int]DistanceData, species *Species, metric int) error {
+func createNexus(outputStem string, distances DistanceMatrix, species *Species, metric int) error {
 	filename := outputStem + "_distance_matrix.nexus"
 	file, err := os.Create(filename)
 	if err != nil {
@@ -239,9 +237,9 @@ func createNexus(outputStem string, distances map[int]DistanceData, species *Spe
 			if i == j {
 				fmt.Fprintf(file, "%1.5f\t", 0.0)
 			} else if i < j {
-				fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(i, j)].Value)
+				fmt.Fprintf(file, "%1.5f\t", distances[i][j].Value)
 			} else {
-				fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(j, i)].Value)
+				fmt.Fprintf(file, "%1.5f\t", distances[j][i].Value)
 			}
 		}
 		fmt.Fprintln(file, "")
@@ -254,7 +252,7 @@ func createNexus(outputStem string, distances map[int]DistanceData, species *Spe
 }
 
 // Create MEGA format (version < 12)
-func createMega(outputStem string, distances map[int]DistanceData, species *Species, cutoff float64, qcData map[int]QCData) error {
+func createMega(outputStem string, distances DistanceMatrix, species *Species, cutoff float64, qcData map[int]QCData) error {
 	filename := outputStem + "_distance_matrix.meg"
 	file, err := os.Create(filename)
 	if err != nil {
@@ -290,7 +288,7 @@ func createMega(outputStem string, distances map[int]DistanceData, species *Spec
 	for ui := 1; ui < len(used); ui++ {
 		y := used[ui]
 		for ux := 0; ux < ui; ux++ {
-			fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(used[ux], y)].Value)
+			fmt.Fprintf(file, "%1.5f\t", distances[used[ux]][y].Value)
 		}
 		fmt.Fprintln(file, "")
 	}
@@ -320,7 +318,7 @@ func fixTaxonomyName(name string) string {
 }
 
 // Create MEGA format version 12
-func createMega12(outputStem string, distances map[int]DistanceData, species *Species, cutoff float64) error {
+func createMega12(outputStem string, distances DistanceMatrix, species *Species, cutoff float64) error {
 	filename := outputStem + "_distance_matrix.meg"
 	file, err := os.Create(filename)
 	if err != nil {
@@ -360,7 +358,7 @@ func createMega12(outputStem string, distances map[int]DistanceData, species *Sp
 		fmt.Fprintf(file, "[%d] ", yIdx+1)
 		for xIdx, x := range used {
 			if xIdx < yIdx {
-				fmt.Fprintf(file, "%9.5f ", distances[distanceIndex(x, y)].Value)
+				fmt.Fprintf(file, "%9.5f ", distances[x][y].Value)
 			} else if xIdx == yIdx {
 				fmt.Fprint(file, "          ")
 			}
@@ -373,7 +371,7 @@ func createMega12(outputStem string, distances map[int]DistanceData, species *Sp
 }
 
 // Create JSON format output
-func createJSON(outputStem string, distances map[int]DistanceData, species *Species, cutoff float64, qcData map[int]QCData) error {
+func createJSON(outputStem string, distances DistanceMatrix, species *Species, cutoff float64, qcData map[int]QCData) error {
 	filename := outputStem + "_distance_matrix.json"
 	file, err := os.Create(filename)
 	if err != nil {
@@ -407,7 +405,7 @@ func createJSON(outputStem string, distances map[int]DistanceData, species *Spec
 		y := used[ui]
 		row := make([]float64, 0, ui)
 		for ux := 0; ux < ui; ux++ {
-			row = append(row, distances[distanceIndex(used[ux], y)].Value)
+			row = append(row, distances[used[ux]][y].Value)
 		}
 		output.DistanceMatrix.Distances = append(output.DistanceMatrix.Distances, row)
 	}
@@ -422,7 +420,7 @@ func createJSON(outputStem string, distances map[int]DistanceData, species *Spec
 }
 
 // updateDistanceAndQC updates distance matrix and QC data for a comparison
-func updateDistanceAndQC(species *Species, distances map[int]DistanceData, qcData map[int]QCData,
+func updateDistanceAndQC(species *Species, distances DistanceMatrix, qcData map[int]QCData,
 	datasetA, datasetB string, setDistance, qcA, qcB float64) {
 
 	a := species.sampleNameToSpeciesIndex(datasetA)
@@ -435,11 +433,13 @@ func updateDistanceAndQC(species *Species, distances map[int]DistanceData, qcDat
 	}
 
 	// Update distance
-	idx := distanceIndex(x, y)
-	d := distances[idx]
+	if distances[x] == nil {
+		distances[x] = make(map[int]DistanceData)
+	}
+	d := distances[x][y]
 	d.Value += setDistance
 	d.Samples++
-	distances[idx] = d
+	distances[x][y] = d
 
 	// Update QC for dataset A
 	qcDataA := qcData[a]
@@ -455,7 +455,7 @@ func updateDistanceAndQC(species *Species, distances map[int]DistanceData, qcDat
 }
 
 // Parse JSON comparison file
-func parseComparisonJSON(filename string, compIdx int, species *Species, distances map[int]DistanceData, qcData map[int]QCData) error {
+func parseComparisonJSON(filename string, compIdx int, species *Species, distances DistanceMatrix, qcData map[int]QCData) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -477,7 +477,7 @@ func parseComparisonJSON(filename string, compIdx int, species *Species, distanc
 }
 
 // Parse text comparison file
-func parseComparisonTxt(filename string, compIdx int, species *Species, distances map[int]DistanceData, qcData map[int]QCData) error {
+func parseComparisonTxt(filename string, compIdx int, species *Species, distances DistanceMatrix, qcData map[int]QCData) error {
 	file, err := os.Open(filename)
 	if err != nil {
 		return err
@@ -611,7 +611,7 @@ func main() {
 	fmt.Println("done")
 
 	// Initialize data structures using maps
-	distances := make(map[int]DistanceData)
+	distances := make(DistanceMatrix)
 	qcData := make(map[int]QCData)
 
 	// Process comparison files
@@ -634,13 +634,12 @@ func main() {
 	fmt.Printf("\ndone (read %d pairwise comparisons)\n", len(comparisons))
 
 	// Compute averages for distances with multiple samples
-	// FIXME: different from C - the C code uses n_comparisons as the loop limit,
-	// but should iterate over all distance entries. This Go version correctly
-	// iterates over the actual distance data.
-	for idx, d := range distances {
-		if d.Samples > 0 {
-			d.Value /= float64(d.Samples)
-			distances[idx] = d
+	for x, row := range distances {
+		for y, d := range row {
+			if d.Samples > 0 {
+				d.Value /= float64(d.Samples)
+				distances[x][y] = d
+			}
 		}
 	}
 
