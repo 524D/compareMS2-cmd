@@ -29,7 +29,9 @@ type SampleToSpecies struct {
 
 // Species contains all species data
 type Species struct {
-	Data []SampleToSpecies
+	Data        []SampleToSpecies
+	nameToIdx   map[string]int // species name -> index in Data
+	sampleToIdx map[string]int // sample name -> species index
 }
 
 // DistanceData holds distance values and sample counts
@@ -71,19 +73,19 @@ type SpeciesQC struct {
 
 // Add a species to the species list
 func (s *Species) addSpecies(speciesName string) {
+	idx := len(s.Data)
 	s.Data = append(s.Data, SampleToSpecies{
 		SpeciesName: speciesName,
 		SampleNames: make([]string, 0),
 		SpeciesUsed: false,
 	})
+	s.nameToIdx[speciesName] = idx
 }
 
 // Find species index by name, add if not found
 func (s *Species) speciesNameToIdx(speciesName string) int {
-	for i := range s.Data {
-		if s.Data[i].SpeciesName == speciesName {
-			return i
-		}
+	if idx, ok := s.nameToIdx[speciesName]; ok {
+		return idx
 	}
 	s.addSpecies(speciesName)
 	return len(s.Data) - 1
@@ -93,6 +95,7 @@ func (s *Species) speciesNameToIdx(speciesName string) int {
 func (s *Species) addSampleSpecies(sampleName, speciesName string) int {
 	idx := s.speciesNameToIdx(speciesName)
 	s.Data[idx].SampleNames = append(s.Data[idx].SampleNames, sampleName)
+	s.sampleToIdx[sampleName] = idx
 	return idx
 }
 
@@ -100,14 +103,10 @@ func (s *Species) addSampleSpecies(sampleName, speciesName string) int {
 func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 	base := filepath.Base(sampleName)
 
-	// Search for existing species with this sample
-	for i := range s.Data {
-		for _, sample := range s.Data[i].SampleNames {
-			if sample == base {
-				s.Data[i].SpeciesUsed = true
-				return i
-			}
-		}
+	// Check if sample already mapped
+	if idx, ok := s.sampleToIdx[base]; ok {
+		s.Data[idx].SpeciesUsed = true
+		return idx
 	}
 
 	// Not found, create new species from sample name
@@ -118,6 +117,8 @@ func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 		SampleNames: []string{base},
 		SpeciesUsed: true,
 	})
+	s.nameToIdx[speciesName] = idx
+	s.sampleToIdx[base] = idx
 	return idx
 }
 
@@ -592,7 +593,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	species := &Species{Data: make([]SampleToSpecies, 0)}
+	species := &Species{
+		Data:        make([]SampleToSpecies, 0),
+		nameToIdx:   make(map[string]int),
+		sampleToIdx: make(map[string]int),
+	}
 
 	// Read sample-to-species mapping if provided
 	if *mappingFile != "" {
