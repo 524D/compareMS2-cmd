@@ -24,7 +24,6 @@ import (
 // For samples that are not mapped to a species, the sample name is used as the species name
 type SampleToSpecies struct {
 	SpeciesName string
-	SampleNames []string
 	SpeciesUsed bool
 }
 
@@ -80,7 +79,6 @@ func (s *Species) addSpecies(speciesName string) {
 	idx := len(s.Data)
 	s.Data = append(s.Data, SampleToSpecies{
 		SpeciesName: speciesName,
-		SampleNames: make([]string, 0),
 		SpeciesUsed: false,
 	})
 	s.nameToIdx[speciesName] = idx
@@ -98,7 +96,6 @@ func (s *Species) speciesNameToIdx(speciesName string) int {
 // Add a sample to a species
 func (s *Species) addSampleSpecies(sampleName, speciesName string) int {
 	idx := s.speciesNameToIdx(speciesName)
-	s.Data[idx].SampleNames = append(s.Data[idx].SampleNames, sampleName)
 	s.sampleToIdx[sampleName] = idx
 	return idx
 }
@@ -118,7 +115,6 @@ func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 	idx := len(s.Data)
 	s.Data = append(s.Data, SampleToSpecies{
 		SpeciesName: speciesName,
-		SampleNames: []string{base},
 		SpeciesUsed: true,
 	})
 	s.nameToIdx[speciesName] = idx
