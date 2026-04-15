@@ -493,6 +493,39 @@ func createJSON(outputStem string, distances map[int]DistanceData, species *Spec
 	return nil
 }
 
+// updateDistanceAndQC updates distance matrix and QC data for a comparison
+func updateDistanceAndQC(species *Species, distances map[int]DistanceData, qcData map[int]QCData,
+	datasetA, datasetB string, setDistance, qcA, qcB float64) {
+
+	a := species.sampleNameToSpeciesIndex(datasetA)
+	b := species.sampleNameToSpeciesIndex(datasetB)
+
+	// Ensure lower triangular: x < y
+	x, y := a, b
+	if a > b {
+		x, y = b, a
+	}
+
+	// Update distance
+	idx := distanceIndex(x, y)
+	d := distances[idx]
+	d.Value += setDistance
+	d.Samples++
+	distances[idx] = d
+
+	// Update QC for dataset A
+	qcDataA := qcData[a]
+	qcDataA.Value += qcA
+	qcDataA.Samples++
+	qcData[a] = qcDataA
+
+	// Update QC for dataset B
+	qcDataB := qcData[b]
+	qcDataB.Value += qcB
+	qcDataB.Samples++
+	qcData[b] = qcDataB
+}
+
 // Parse JSON comparison file
 func parseComparisonJSON(filename string, compIdx int, species *Species, distances map[int]DistanceData, qcData map[int]QCData) error {
 	file, err := os.Open(filename)
@@ -503,37 +536,14 @@ func parseComparisonJSON(filename string, compIdx int, species *Species, distanc
 
 	fmt.Printf("\nreading pairwise comparison %d (JSON)", compIdx)
 
-	// Try to parse as proper JSON using the ComparisonResult struct
 	var result ComparisonResult
 	decoder := json.NewDecoder(file)
 	if err := decoder.Decode(&result); err != nil {
 		return fmt.Errorf("error decoding JSON file %s: %v", filename, err)
 	}
 
-	a := species.sampleNameToSpeciesIndex(result.DatasetA)
-	b := species.sampleNameToSpeciesIndex(result.DatasetB)
-
-	// Ensure lower triangular: x < y
-	x, y := a, b
-	if a > b {
-		x, y = b, a
-	}
-
-	idx := distanceIndex(x, y)
-	d := distances[idx]
-	d.Value += result.SetDistance
-	d.Samples++
-	distances[idx] = d
-
-	qcA := qcData[a]
-	qcA.Value += result.DatasetAQC
-	qcA.Samples++
-	qcData[a] = qcA
-
-	qcB := qcData[b]
-	qcB.Value += result.DatasetBQC
-	qcB.Samples++
-	qcData[b] = qcB
+	updateDistanceAndQC(species, distances, qcData,
+		result.DatasetA, result.DatasetB, result.SetDistance, result.DatasetAQC, result.DatasetBQC)
 
 	return nil
 }
@@ -548,7 +558,7 @@ func parseComparisonTxt(filename string, compIdx int, species *Species, distance
 
 	scanner := bufio.NewScanner(file)
 
-	var a, b, x, y int
+	var result ComparisonResult
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -566,44 +576,28 @@ func parseComparisonTxt(filename string, compIdx int, species *Species, distance
 
 		switch field {
 		case "dataset_A":
-			a = species.sampleNameToSpeciesIndex(value)
-			fmt.Printf("\nread pairwise comparison %d (%s and ", compIdx, value)
-
+			result.DatasetA = value
 		case "dataset_B":
-			b = species.sampleNameToSpeciesIndex(value)
-			// Ensure lower triangular
-			if a < b {
-				x, y = a, b
-			} else {
-				x, y = b, a
-			}
-			fmt.Printf("%s)", value)
-
+			result.DatasetB = value
 		case "set_distance":
-			dist, _ := strconv.ParseFloat(value, 64)
-			idx := distanceIndex(x, y)
-			d := distances[idx]
-			d.Value += dist
-			d.Samples++
-			distances[idx] = d
-
+			result.SetDistance, _ = strconv.ParseFloat(value, 64)
 		case "dataset_A_QC":
-			qc, _ := strconv.ParseFloat(value, 64)
-			qcA := qcData[a]
-			qcA.Value += qc
-			qcA.Samples++
-			qcData[a] = qcA
-
+			result.DatasetAQC, _ = strconv.ParseFloat(value, 64)
 		case "dataset_B_QC":
-			qc, _ := strconv.ParseFloat(value, 64)
-			qcB := qcData[b]
-			qcB.Value += qc
-			qcB.Samples++
-			qcData[b] = qcB
+			result.DatasetBQC, _ = strconv.ParseFloat(value, 64)
 		}
 	}
 
-	return scanner.Err()
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+
+	fmt.Printf("\nread pairwise comparison %d (%s and %s)", compIdx, result.DatasetA, result.DatasetB)
+
+	updateDistanceAndQC(species, distances, qcData,
+		result.DatasetA, result.DatasetB, result.SetDistance, result.DatasetAQC, result.DatasetBQC)
+
+	return nil
 }
 
 func usage() {
