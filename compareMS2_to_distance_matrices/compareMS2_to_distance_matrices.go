@@ -96,25 +96,9 @@ func (s *Species) addSampleSpecies(sampleName, speciesName string) int {
 	return idx
 }
 
-// Get basename from path (works for both Unix and Windows paths)
-func basename(path string) string {
-	// Use filepath.Base for cross-platform support
-	base := filepath.Base(path)
-	return base
-}
-
-// Remove extension from filename
-func removeExtension(filename string) string {
-	ext := filepath.Ext(filename)
-	if ext != "" {
-		return filename[:len(filename)-len(ext)]
-	}
-	return filename
-}
-
 // Map sample name to species index
 func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
-	base := basename(sampleName)
+	base := filepath.Base(sampleName)
 
 	// Search for existing species with this sample
 	for i := range s.Data {
@@ -127,7 +111,7 @@ func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 	}
 
 	// Not found, create new species from sample name
-	speciesName := removeExtension(base)
+	speciesName := strings.TrimSuffix(base, filepath.Ext(base))
 	idx := len(s.Data)
 	s.Data = append(s.Data, SampleToSpecies{
 		SpeciesName: speciesName,
@@ -187,15 +171,15 @@ func readFileList(filename string) ([]string, error) {
 	return files, nil
 }
 
-// Get number of species with data
-func (s *Species) getNumSpecies() int {
-	count := 0
+// Get indices of used species
+func (s *Species) usedIndices() []int {
+	var indices []int
 	for i := range s.Data {
 		if s.Data[i].SpeciesUsed {
-			count++
+			indices = append(indices, i)
 		}
 	}
-	return count
+	return indices
 }
 
 // Calculate distance matrix index for lower triangular matrix
@@ -215,7 +199,8 @@ func createNexus(outputStem string, distances map[int]DistanceData, species *Spe
 
 	fmt.Println("writing distance matrix in NEXUS format...")
 
-	nSpecies := species.getNumSpecies()
+	used := species.usedIndices()
+	nSpecies := len(used)
 
 	fmt.Fprintln(file, "#NEXUS")
 	fmt.Fprintln(file, "[                                                                              ]")
@@ -231,10 +216,8 @@ func createNexus(outputStem string, distances map[int]DistanceData, species *Spe
 	fmt.Fprintf(file, "   DIMENSIONS ntax=%d;\n", nSpecies)
 	fmt.Fprint(file, "   TAXLABELS")
 
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			fmt.Fprintf(file, "   %s", species.Data[i].SpeciesName)
-		}
+	for _, i := range used {
+		fmt.Fprintf(file, "   %s", species.Data[i].SpeciesName)
 	}
 	fmt.Fprintln(file, ";")
 	fmt.Fprintln(file, "END;")
@@ -249,32 +232,18 @@ func createNexus(outputStem string, distances map[int]DistanceData, species *Spe
 	fmt.Fprintln(file, "   ;")
 	fmt.Fprintln(file, "MATRIX")
 
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			anyOut := false
-			for j := range species.Data {
-				if species.Data[j].SpeciesUsed {
-					if !anyOut {
-						fmt.Fprintf(file, "%s\t", species.Data[i].SpeciesName)
-						anyOut = true
-					}
-
-					if i == j {
-						fmt.Fprintf(file, "%1.5f\t", 0.0)
-					} else if i < j {
-						dist := distances[distanceIndex(i, j)].Value
-						fmt.Fprintf(file, "%1.5f\t", dist)
-					} else {
-						// Upper triangular - swap coordinates
-						dist := distances[distanceIndex(j, i)].Value
-						fmt.Fprintf(file, "%1.5f\t", dist)
-					}
-				}
-			}
-			if anyOut {
-				fmt.Fprintln(file, "")
+	for _, i := range used {
+		fmt.Fprintf(file, "%s\t", species.Data[i].SpeciesName)
+		for _, j := range used {
+			if i == j {
+				fmt.Fprintf(file, "%1.5f\t", 0.0)
+			} else if i < j {
+				fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(i, j)].Value)
+			} else {
+				fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(j, i)].Value)
 			}
 		}
+		fmt.Fprintln(file, "")
 	}
 
 	fmt.Fprintln(file, ";")
@@ -297,42 +266,32 @@ func createMega(outputStem string, distances map[int]DistanceData, species *Spec
 	fmt.Fprintln(file, "#mega")
 	fmt.Fprintf(file, "TITLE: %s (lower-left triangular matrix, cutoff=%.4f)\n\n", filename, cutoff)
 
+	used := species.usedIndices()
+
 	// Output QC values
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			qc := qcData[i]
-			avgQC := 0.0
-			if qc.Samples > 0 {
-				avgQC = qc.Value / float64(qc.Samples)
-			}
-			fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.Data[i].SpeciesName, avgQC)
+	for _, i := range used {
+		qc := qcData[i]
+		avgQC := 0.0
+		if qc.Samples > 0 {
+			avgQC = qc.Value / float64(qc.Samples)
 		}
+		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.Data[i].SpeciesName, avgQC)
 	}
 	fmt.Fprintln(file, "")
 
 	// Output species names
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			fmt.Fprintf(file, "#%s\n", species.Data[i].SpeciesName)
-		}
+	for _, i := range used {
+		fmt.Fprintf(file, "#%s\n", species.Data[i].SpeciesName)
 	}
-	fmt.Fprintln(file, "\n")
+	fmt.Fprint(file, "\n\n")
 
 	// Output distance matrix (lower triangular)
-	for y := 1; y < len(species.Data); y++ {
-		if species.Data[y].SpeciesUsed {
-			anyOut := false
-			for x := 0; x < y; x++ {
-				if species.Data[x].SpeciesUsed {
-					dist := distances[distanceIndex(x, y)].Value
-					fmt.Fprintf(file, "%1.5f\t", dist)
-					anyOut = true
-				}
-			}
-			if anyOut {
-				fmt.Fprintln(file, "")
-			}
+	for ui := 1; ui < len(used); ui++ {
+		y := used[ui]
+		for ux := 0; ux < ui; ux++ {
+			fmt.Fprintf(file, "%1.5f\t", distances[distanceIndex(used[ux], y)].Value)
 		}
+		fmt.Fprintln(file, "")
 	}
 
 	return nil
@@ -340,28 +299,22 @@ func createMega(outputStem string, distances map[int]DistanceData, species *Spec
 
 // Fix taxonomy name for MEGA format
 func fixTaxonomyName(name string) string {
+	const firstAllowed = "-+."
+	const restAllowed = "-+._*:()|\\//"
+
 	runes := []rune(name)
-	if len(runes) == 0 {
-		return name
-	}
-
-	// First character
-	if !unicode.IsLetter(runes[0]) && !unicode.IsDigit(runes[0]) &&
-		runes[0] != '-' && runes[0] != '+' && runes[0] != '.' {
-		runes[0] = '_'
-	}
-
-	// Remaining characters
-	for i := 1; i < len(runes); i++ {
-		if !unicode.IsLetter(runes[i]) && !unicode.IsDigit(runes[i]) &&
-			runes[i] != '-' && runes[i] != '+' && runes[i] != '.' &&
-			runes[i] != '_' && runes[i] != '*' && runes[i] != ':' &&
-			runes[i] != '(' && runes[i] != ')' && runes[i] != '|' &&
-			runes[i] != '\\' && runes[i] != '/' {
+	for i, r := range runes {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			continue
+		}
+		allowed := restAllowed
+		if i == 0 {
+			allowed = firstAllowed
+		}
+		if !strings.ContainsRune(allowed, r) {
 			runes[i] = '_'
 		}
 	}
-
 	return string(runes)
 }
 
@@ -376,7 +329,8 @@ func createMega12(outputStem string, distances map[int]DistanceData, species *Sp
 
 	fmt.Println("writing distance matrix in MEGA 12 format...")
 
-	nSpecies := species.getNumSpecies()
+	used := species.usedIndices()
+	nSpecies := len(used)
 
 	fmt.Fprintln(file, "#mega")
 	fmt.Fprintf(file, "!Title: %s;\n", outputStem)
@@ -388,48 +342,29 @@ func createMega12(outputStem string, distances map[int]DistanceData, species *Sp
 	fmt.Fprintln(file, "")
 
 	// Output numbered species list
-	speciesIdx := 1
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			fixedName := fixTaxonomyName(species.Data[i].SpeciesName)
-			fmt.Fprintf(file, "[%d] #%s\n", speciesIdx, fixedName)
-			speciesIdx++
-		}
+	for idx, i := range used {
+		fmt.Fprintf(file, "[%d] #%s\n", idx+1, fixTaxonomyName(species.Data[i].SpeciesName))
 	}
 	fmt.Fprintln(file, "")
 
 	// Output column header
 	fmt.Fprint(file, "[")
-	speciesIdx = 1
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			fmt.Fprintf(file, "%9d ", speciesIdx)
-			speciesIdx++
-		}
+	for idx := range used {
+		fmt.Fprintf(file, "%9d ", idx+1)
 	}
 	fmt.Fprintln(file, " ]")
 
 	// Output distance matrix
-	speciesIdx = 1
-	for y := range species.Data {
-		if species.Data[y].SpeciesUsed {
-			fmt.Fprintf(file, "[%d] ", speciesIdx)
-			for x := range species.Data {
-				if species.Data[x].SpeciesUsed {
-					if x < y {
-						// Lower triangular part
-						dist := distances[distanceIndex(x, y)].Value
-						fmt.Fprintf(file, "%9.5f ", dist)
-					} else if x == y {
-						// Diagonal - empty
-						fmt.Fprint(file, "          ")
-					}
-					// Upper triangular - nothing
-				}
+	for yIdx, y := range used {
+		fmt.Fprintf(file, "[%d] ", yIdx+1)
+		for xIdx, x := range used {
+			if xIdx < yIdx {
+				fmt.Fprintf(file, "%9.5f ", distances[distanceIndex(x, y)].Value)
+			} else if xIdx == yIdx {
+				fmt.Fprint(file, "          ")
 			}
-			fmt.Fprintln(file, "")
-			speciesIdx++
 		}
+		fmt.Fprintln(file, "")
 	}
 	fmt.Fprintln(file, "")
 
@@ -451,37 +386,29 @@ func createJSON(outputStem string, distances map[int]DistanceData, species *Spec
 	output.DistanceMatrix.Title = outputStem
 	output.DistanceMatrix.Cutoff = cutoff
 
+	used := species.usedIndices()
+
 	// Build species list with QC values
-	output.DistanceMatrix.Species = make([]SpeciesQC, 0)
-	for i := range species.Data {
-		if species.Data[i].SpeciesUsed {
-			qc := qcData[i]
-			avgQC := 0.0
-			if qc.Samples > 0 {
-				avgQC = qc.Value / float64(qc.Samples)
-			}
-			output.DistanceMatrix.Species = append(output.DistanceMatrix.Species, SpeciesQC{
-				Name: species.Data[i].SpeciesName,
-				QC:   avgQC,
-			})
+	for _, i := range used {
+		qc := qcData[i]
+		avgQC := 0.0
+		if qc.Samples > 0 {
+			avgQC = qc.Value / float64(qc.Samples)
 		}
+		output.DistanceMatrix.Species = append(output.DistanceMatrix.Species, SpeciesQC{
+			Name: species.Data[i].SpeciesName,
+			QC:   avgQC,
+		})
 	}
 
 	// Build distance matrix (lower triangular)
-	output.DistanceMatrix.Distances = make([][]float64, 0)
-	for y := 1; y < len(species.Data); y++ {
-		if species.Data[y].SpeciesUsed {
-			row := make([]float64, 0)
-			for x := 0; x < y; x++ {
-				if species.Data[x].SpeciesUsed {
-					dist := distances[distanceIndex(x, y)].Value
-					row = append(row, dist)
-				}
-			}
-			if len(row) > 0 {
-				output.DistanceMatrix.Distances = append(output.DistanceMatrix.Distances, row)
-			}
+	for ui := 1; ui < len(used); ui++ {
+		y := used[ui]
+		row := make([]float64, 0, ui)
+		for ux := 0; ux < ui; ux++ {
+			row = append(row, distances[distanceIndex(used[ux], y)].Value)
 		}
+		output.DistanceMatrix.Distances = append(output.DistanceMatrix.Distances, row)
 	}
 
 	encoder := json.NewEncoder(file)
