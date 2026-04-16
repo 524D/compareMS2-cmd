@@ -40,6 +40,14 @@ type QCData struct {
 	Samples int
 }
 
+// Average returns the average QC value
+func (qc QCData) Average() float64 {
+	if qc.Samples > 0 {
+		return qc.Value / float64(qc.Samples)
+	}
+	return 0.0
+}
+
 // DistanceMatrix is a 2D map storing distance data between species pairs
 type DistanceMatrix map[int]map[int]DistanceData
 
@@ -103,11 +111,8 @@ func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 
 	// Not found, create new species from sample name
 	speciesName := strings.TrimSuffix(base, filepath.Ext(base))
-	idx := len(s.name)
-	s.name = append(s.name, speciesName)
+	idx := s.addSampleSpecies(base, speciesName)
 	s.speciesHasData[idx] = true
-	s.nameToIdx[speciesName] = idx
-	s.sampleToIdx[base] = idx
 	return idx
 }
 
@@ -254,12 +259,7 @@ func createMega(outputStem string, distances DistanceMatrix, species *Species, c
 
 	// Output QC values
 	for _, i := range used {
-		qc := qcData[i]
-		avgQC := 0.0
-		if qc.Samples > 0 {
-			avgQC = qc.Value / float64(qc.Samples)
-		}
-		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.name[i], avgQC)
+		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.name[i], qcData[i].Average())
 	}
 	fmt.Fprintln(file, "")
 
@@ -374,14 +374,9 @@ func createJSON(outputStem string, distances DistanceMatrix, species *Species, c
 
 	// Build species list with QC values
 	for _, i := range used {
-		qc := qcData[i]
-		avgQC := 0.0
-		if qc.Samples > 0 {
-			avgQC = qc.Value / float64(qc.Samples)
-		}
 		output.DistanceMatrix.Species = append(output.DistanceMatrix.Species, SpeciesQC{
 			Name: species.name[i],
-			QC:   avgQC,
+			QC:   qcData[i].Average(),
 		})
 	}
 
