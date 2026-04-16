@@ -20,18 +20,12 @@ import (
 	"unicode"
 )
 
-// SampleToSpecies represents a species with its associated samples
-// For samples that are not mapped to a species, the sample name is used as the species name
-type SampleToSpecies struct {
-	SpeciesName string
-	SpeciesUsed bool
-}
-
 // Species contains all species data
 type Species struct {
-	Data        []SampleToSpecies
-	nameToIdx   map[string]int // species name -> index in Data
-	sampleToIdx map[string]int // sample name -> species index
+	name           []string       // species names indexed by species index
+	speciesHasData map[int]bool   // tracks which species have data
+	nameToIdx      map[string]int // species name -> index in name
+	sampleToIdx    map[string]int // sample name -> species index
 }
 
 // DistanceData holds distance values and sample counts
@@ -76,11 +70,8 @@ type SpeciesQC struct {
 
 // Add a species to the species list
 func (s *Species) addSpecies(speciesName string) {
-	idx := len(s.Data)
-	s.Data = append(s.Data, SampleToSpecies{
-		SpeciesName: speciesName,
-		SpeciesUsed: false,
-	})
+	idx := len(s.name)
+	s.name = append(s.name, speciesName)
 	s.nameToIdx[speciesName] = idx
 }
 
@@ -90,7 +81,7 @@ func (s *Species) speciesNameToIdx(speciesName string) int {
 		return idx
 	}
 	s.addSpecies(speciesName)
-	return len(s.Data) - 1
+	return len(s.name) - 1
 }
 
 // Add a sample to a species
@@ -106,17 +97,15 @@ func (s *Species) sampleNameToSpeciesIndex(sampleName string) int {
 
 	// Check if sample already mapped
 	if idx, ok := s.sampleToIdx[base]; ok {
-		s.Data[idx].SpeciesUsed = true
+		s.speciesHasData[idx] = true
 		return idx
 	}
 
 	// Not found, create new species from sample name
 	speciesName := strings.TrimSuffix(base, filepath.Ext(base))
-	idx := len(s.Data)
-	s.Data = append(s.Data, SampleToSpecies{
-		SpeciesName: speciesName,
-		SpeciesUsed: true,
-	})
+	idx := len(s.name)
+	s.name = append(s.name, speciesName)
+	s.speciesHasData[idx] = true
 	s.nameToIdx[speciesName] = idx
 	s.sampleToIdx[base] = idx
 	return idx
@@ -175,8 +164,8 @@ func readFileList(filename string) ([]string, error) {
 // Get indices of used species
 func (s *Species) usedIndices() []int {
 	var indices []int
-	for i := range s.Data {
-		if s.Data[i].SpeciesUsed {
+	for i := range s.name {
+		if s.speciesHasData[i] {
 			indices = append(indices, i)
 		}
 	}
@@ -212,7 +201,7 @@ func createNexus(outputStem string, distances DistanceMatrix, species *Species, 
 	fmt.Fprint(file, "   TAXLABELS")
 
 	for _, i := range used {
-		fmt.Fprintf(file, "   %s", species.Data[i].SpeciesName)
+		fmt.Fprintf(file, "   %s", species.name[i])
 	}
 	fmt.Fprintln(file, ";")
 	fmt.Fprintln(file, "END;")
@@ -228,7 +217,7 @@ func createNexus(outputStem string, distances DistanceMatrix, species *Species, 
 	fmt.Fprintln(file, "MATRIX")
 
 	for _, i := range used {
-		fmt.Fprintf(file, "%s\t", species.Data[i].SpeciesName)
+		fmt.Fprintf(file, "%s\t", species.name[i])
 		for _, j := range used {
 			if i == j {
 				fmt.Fprintf(file, "%1.5f\t", 0.0)
@@ -270,13 +259,13 @@ func createMega(outputStem string, distances DistanceMatrix, species *Species, c
 		if qc.Samples > 0 {
 			avgQC = qc.Value / float64(qc.Samples)
 		}
-		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.Data[i].SpeciesName, avgQC)
+		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.name[i], avgQC)
 	}
 	fmt.Fprintln(file, "")
 
 	// Output species names
 	for _, i := range used {
-		fmt.Fprintf(file, "#%s\n", species.Data[i].SpeciesName)
+		fmt.Fprintf(file, "#%s\n", species.name[i])
 	}
 	fmt.Fprint(file, "\n\n")
 
@@ -338,7 +327,7 @@ func createMega12(outputStem string, distances DistanceMatrix, species *Species,
 
 	// Output numbered species list
 	for idx, i := range used {
-		fmt.Fprintf(file, "[%d] #%s\n", idx+1, fixTaxonomyName(species.Data[i].SpeciesName))
+		fmt.Fprintf(file, "[%d] #%s\n", idx+1, fixTaxonomyName(species.name[i]))
 	}
 	fmt.Fprintln(file, "")
 
@@ -391,7 +380,7 @@ func createJSON(outputStem string, distances DistanceMatrix, species *Species, c
 			avgQC = qc.Value / float64(qc.Samples)
 		}
 		output.DistanceMatrix.Species = append(output.DistanceMatrix.Species, SpeciesQC{
-			Name: species.Data[i].SpeciesName,
+			Name: species.name[i],
 			QC:   avgQC,
 		})
 	}
@@ -590,9 +579,10 @@ func main() {
 	}
 
 	species := &Species{
-		Data:        make([]SampleToSpecies, 0),
-		nameToIdx:   make(map[string]int),
-		sampleToIdx: make(map[string]int),
+		name:           make([]string, 0),
+		speciesHasData: make(map[int]bool),
+		nameToIdx:      make(map[string]int),
+		sampleToIdx:    make(map[string]int),
 	}
 
 	// Read sample-to-species mapping if provided
