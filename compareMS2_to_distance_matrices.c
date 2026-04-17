@@ -251,7 +251,7 @@ static int create_nexus(char* output_filename_stem, double* distance, species_t*
 	printf("writing distance matrix in NEXUS format...\n");
 
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix.nexus");
+	strcat(output_filename, ".nexus");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
@@ -328,7 +328,7 @@ static int create_mega(char* output_filename_stem, double* distance, species_t* 
 
 	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix.meg");
+	strcat(output_filename, ".meg");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
@@ -426,7 +426,7 @@ static int create_json(char* output_filename_stem, double* distance, species_t* 
 
 	/* output distance matrix file in JSON format */
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix.json");
+	strcat(output_filename, ".json");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
@@ -528,7 +528,7 @@ static int create_mega12(char* output_filename_stem, double* distance, species_t
 
 	/* output distance matrix file with inverted means (of fraction_gt_cutoff) in MEGA format */
 	strcpy(output_filename, output_filename_stem);
-	strcat(output_filename, "_distance_matrix.meg");
+	strcat(output_filename, ".meg");
 	if ((output_file = fopen(output_filename, "w")) == NULL) {
 		printf("error opening output file %s for writing", output_filename);
 		return -1;
