@@ -650,6 +650,11 @@ static void parse_comparison_json(FILE* input_file, long comp_idx, species_t* sp
 				p++;
 				while (*p == ' ')
 					p++;
+				if (x==y) {
+					// Distance between same species, ignore
+					// This can happen if the species contains multiple samples
+					continue;
+				}
 				double d = atof(p);
 				long di = distance_index(x, y);
 				distance[di] += d;
@@ -714,6 +719,11 @@ static void parse_comparison_txt(FILE* input_file, long comp_idx, species_t* spe
 			printf("%s)", p);
 		} else if (strcmp(p, "set_distance") == 0) {
 			p = strtok(NULL, "\t");
+			if (x==y) {
+				// Distance between same species, ignore
+				// This can happen if the species contains multiple samples
+				continue;
+			}
 			double d = atof(p);
 			long di = distance_index(x, y);
 			distance[di] += d;
