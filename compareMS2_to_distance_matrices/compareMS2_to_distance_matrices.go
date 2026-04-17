@@ -179,7 +179,7 @@ func (s *Species) usedIndices() []int {
 
 // Create NEXUS format output
 func createNexus(outputStem string, distances DistanceMatrix, species *Species, metric int) error {
-	filename := outputStem + "_distance_matrix.nexus"
+	filename := outputStem + ".nexus"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error opening output file %s: %v", filename, err)
@@ -243,7 +243,7 @@ func createNexus(outputStem string, distances DistanceMatrix, species *Species, 
 
 // Create MEGA format (version < 12)
 func createMega(outputStem string, distances DistanceMatrix, species *Species, cutoff float64, qcData map[int]QCData) error {
-	filename := outputStem + "_distance_matrix.meg"
+	filename := outputStem + ".meg"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error opening output file %s: %v", filename, err)
@@ -304,7 +304,7 @@ func fixTaxonomyName(name string) string {
 
 // Create MEGA format version 12
 func createMega12(outputStem string, distances DistanceMatrix, species *Species, cutoff float64) error {
-	filename := outputStem + "_distance_matrix.meg"
+	filename := outputStem + ".meg"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error opening output file %s: %v", filename, err)
@@ -357,7 +357,7 @@ func createMega12(outputStem string, distances DistanceMatrix, species *Species,
 
 // Create JSON format output
 func createJSON(outputStem string, distances DistanceMatrix, species *Species, cutoff float64, qcData map[int]QCData) error {
-	filename := outputStem + "_distance_matrix.json"
+	filename := outputStem + ".json"
 	file, err := os.Create(filename)
 	if err != nil {
 		return fmt.Errorf("error opening output file %s: %v", filename, err)
