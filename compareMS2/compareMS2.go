@@ -52,7 +52,7 @@ type Peak struct {
 
 // Spectrum represents a single MS2 spectrum
 type Spectrum struct {
-	Scan              int64
+	Scan              int
 	RT                float64
 	Peaks             []Peak
 	Charge            int
@@ -86,8 +86,8 @@ type Parameters struct {
 	MaxScanNumberDifference    float64
 	MaxRTDifference            float64
 	MaxPrecursorDifference     float64
-	StartScan                  int64
-	EndScan                    int64
+	StartScan                  int
+	EndScan                    int
 	StartRT                    float64
 	EndRT                      float64
 	Cutoff                     float64
@@ -97,12 +97,12 @@ type Parameters struct {
 	SpectrumMetric             int
 	QC                         int
 	BinSize                    float64
-	MinPeaks                   int64
-	PeakCount                  int64
+	MinPeaks                   int
+	PeakCount                  int
 	MinMz                      float64
 	MaxMz                      float64
 	NBins                      int
-	TopN                       int64
+	TopN                       int
 	ExperimentalFeatures       int
 }
 
@@ -155,10 +155,10 @@ func (p *Parameters) ParseFlags() error {
 	flag.IntVar(&p.SpectrumMetric, "f", p.SpectrumMetric, "Spectrum metric")
 	flag.IntVar(&p.QC, "q", p.QC, "QC measure")
 	flag.Float64Var(&p.BinSize, "b", p.BinSize, "Bin size")
-	flag.Int64Var(&p.MinPeaks, "I", p.MinPeaks, "Minimum peaks")
+	flag.IntVar(&p.MinPeaks, "I", p.MinPeaks, "Minimum peaks")
 	flag.Float64Var(&p.MinMz, "L", p.MinMz, "Minimum m/z")
 	flag.Float64Var(&p.MaxMz, "U", p.MaxMz, "Maximum m/z")
-	flag.Int64Var(&p.TopN, "N", p.TopN, "Top N spectra")
+	flag.IntVar(&p.TopN, "N", p.TopN, "Top N spectra")
 	flag.IntVar(&p.ExperimentalFeatures, "x", p.ExperimentalFeatures, "Experimental features")
 
 	// Custom flags for ranges
@@ -180,10 +180,10 @@ func (p *Parameters) ParseFlags() error {
 	if scanRange != "" {
 		parts := strings.Split(scanRange, ",")
 		if len(parts) == 2 {
-			if v, err := strconv.ParseInt(parts[0], 10, 64); err == nil {
+			if v, err := strconv.Atoi(parts[0]); err == nil {
 				p.StartScan = v
 			}
-			if v, err := strconv.ParseInt(parts[1], 10, 64); err == nil {
+			if v, err := strconv.Atoi(parts[1]); err == nil {
 				p.EndScan = v
 			}
 		}
@@ -286,8 +286,8 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 	fmt.Printf("checking dataset %c (\"%s\")...", dataset.ID, dataset.Filename)
 
 	scanner := bufio.NewScanner(file)
-	nPeaks := int64(0)
-	specCount := int64(0)
+	nPeaks := 0
+	specCount := 0
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -371,7 +371,7 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 				specStatus = 2 // IN_RANGE_AND_FIRST_PEAK
 			} else if strings.HasPrefix(line, "SCANS=") || strings.HasPrefix(line, "###MSMS:") {
 				numStr := parseNumber(line)
-				if scan, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+				if scan, err := strconv.Atoi(numStr); err == nil {
 					if scan < par.StartScan || scan > par.EndScan {
 						specStatus = 0 // NOT_IN_RANGE
 					}
@@ -381,7 +381,7 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 				scanIdx := strings.Index(line, "scan=")
 				if scanIdx != -1 {
 					numStr := parseNumber(line[scanIdx+5:])
-					if scan, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+					if scan, err := strconv.Atoi(numStr); err == nil {
 						if scan < par.StartScan || scan > par.EndScan {
 							specStatus = 0 // NOT_IN_RANGE
 						}
@@ -399,10 +399,10 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 
 		if i < 0 {
 			dataset.Cutoff = 1e30
-		} else if int64(i) < par.TopN {
+		} else if i < par.TopN {
 			dataset.Cutoff = 0.0
 		} else {
-			dataset.Cutoff = quickSelect(dataset.Intensities, 0, i, int(par.TopN))
+			dataset.Cutoff = quickSelect(dataset.Intensities, 0, i, par.TopN)
 		}
 
 		fmt.Printf("done (ion intensity threshold %.3f)\n", dataset.Cutoff)
@@ -468,13 +468,13 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 			}
 		} else if strings.HasPrefix(line, "SCANS=") {
 			numStr := parseNumber(line)
-			if scan, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+			if scan, err := strconv.Atoi(numStr); err == nil {
 				dataset.Spectra[i].Scan = scan
 				dataset.ScanNumbersCouldBeRead = true
 			}
 		} else if strings.HasPrefix(line, "###MSMS:") {
 			numStr := parseNumber(line)
-			if scan, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+			if scan, err := strconv.Atoi(numStr); err == nil {
 				dataset.Spectra[i].Scan = scan
 				dataset.ScanNumbersCouldBeRead = true
 			}
@@ -482,7 +482,7 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 			scanIdx := strings.Index(line, "scan=")
 			if scanIdx != -1 {
 				numStr := parseNumber(line[scanIdx+5:])
-				if scan, err := strconv.ParseInt(numStr, 10, 64); err == nil {
+				if scan, err := strconv.Atoi(numStr); err == nil {
 					dataset.Spectra[i].Scan = scan
 					dataset.ScanNumbersCouldBeRead = true
 				}
@@ -575,14 +575,14 @@ func ScaleNormalizeBin(par *Parameters, dataset *Dataset) {
 
 // ComputeDotProdHistogram compares spectra and computes histograms
 func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
-	dotprodHistogram []int64, massDiffDotProductHistogram [][]int64,
-	nComparisons, greaterThanCutoff, sAB, actualCompared *int64, asymmetric bool) {
+	dotprodHistogram []int, massDiffDotProductHistogram [][]int,
+	nComparisons, greaterThanCutoff, sAB, actualCompared *int, asymmetric bool) {
 
 	for i := 0; i < len(datasetA.Spectra); i++ {
 		A := &datasetA.Spectra[i]
 
 		// Check top-N filter
-		if par.TopN > -1 && par.TopN < int64(len(datasetA.Spectra)) {
+		if par.TopN > -1 && par.TopN < len(datasetA.Spectra) {
 			if datasetA.Intensities[i] <= datasetA.Cutoff {
 				continue
 			}
@@ -594,7 +594,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 		if A.Scan > par.EndScan {
 			break
 		}
-		if int64(A.NPeaks) < par.MinPeaks {
+		if A.NPeaks < par.MinPeaks {
 			continue
 		}
 		if A.BasepeakIntensity < par.MinBasepeakIntensity {
@@ -611,7 +611,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 			B := &datasetB.Spectra[j]
 
 			// Check top-N filter
-			if par.TopN > -1 && par.TopN < int64(len(datasetB.Spectra)) {
+			if par.TopN > -1 && par.TopN < len(datasetB.Spectra) {
 				if datasetB.Intensities[j] <= datasetB.Cutoff {
 					continue
 				}
@@ -623,7 +623,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 			if B.Scan > par.EndScan {
 				break
 			}
-			if int64(B.NPeaks) < par.MinPeaks {
+			if B.NPeaks < par.MinPeaks {
 				continue
 			}
 			if B.BasepeakIntensity < par.MinBasepeakIntensity {
@@ -704,7 +704,7 @@ type JSONOutput struct {
 	DatasetB                 string                 `json:"datasetB"`
 	SetDistance              interface{}            `json:"setDistance"`
 	SetMetric                int                    `json:"setMetric"`
-	ScanRange                [2]int64               `json:"scanRange"`
+	ScanRange                [2]int                 `json:"scanRange"`
 	MaxScanDiff              float64                `json:"maxScanDiff"`
 	MaxMzDiff                float64                `json:"maxMzDiff"`
 	ScalingPower             float64                `json:"scalingPower"`
@@ -713,10 +713,10 @@ type JSONOutput struct {
 	MinTotalIonCurrent       float64                `json:"minTotalIonCurrent"`
 	DatasetAQC               int                    `json:"datasetAQC,omitempty"`
 	DatasetBQC               int                    `json:"datasetBQC,omitempty"`
-	NrGtCutoff               int64                  `json:"nrGtCutoff"`
-	NrComparisons            int64                  `json:"nrComparisons"`
-	MinPeaks                 int64                  `json:"minPeaks"`
-	MaxPeaks                 int64                  `json:"maxPeaks"`
+	NrGtCutoff               int                    `json:"nrGtCutoff"`
+	NrComparisons            int                    `json:"nrComparisons"`
+	MinPeaks                 int                    `json:"minPeaks"`
+	MaxPeaks                 int                    `json:"maxPeaks"`
 	MzRange                  [2]float64             `json:"mzRange"`
 	MzBinSize                float64                `json:"mzBinSize"`
 	NrMzBins                 int                    `json:"nrMzBins"`
@@ -727,19 +727,19 @@ type JSONOutput struct {
 type HistogramData struct {
 	NrBins       int        `json:"nrBins"`
 	DotProdRange [2]float64 `json:"dotProdRange"`
-	Count        []int64    `json:"count"`
+	Count        []int      `json:"count"`
 }
 
 type MassDiffHistogramData struct {
 	MzRange      [2]float64 `json:"mzRange"`
 	DotProdRange [2]float64 `json:"dotProdRange"`
-	Count        [][]int64  `json:"count"`
+	Count        [][]int    `json:"count"`
 }
 
 // WriteJSON writes results to JSON file
 func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
-	dotprodHistogram []int64, massDiffDotProductHistogram [][]int64,
-	nComparisons, greaterThanCutoff, sAB, sBA int64) error {
+	dotprodHistogram []int, massDiffDotProductHistogram [][]int,
+	nComparisons, greaterThanCutoff, sAB, sBA int) error {
 
 	if par.JSONFilename == "" {
 		return nil
@@ -747,8 +747,8 @@ func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
 
 	// Calculate set distance
 	var setDistance interface{}
-	sizeA := int64(len(datasetA.Spectra))
-	sizeB := int64(len(datasetB.Spectra))
+	sizeA := len(datasetA.Spectra)
+	sizeB := len(datasetB.Spectra)
 
 	switch par.Metric {
 	case 0: // original metric
@@ -777,7 +777,7 @@ func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
 		DatasetB:             datasetB.Filename,
 		SetDistance:          setDistance,
 		SetMetric:            par.Metric,
-		ScanRange:            [2]int64{par.StartScan, par.EndScan},
+		ScanRange:            [2]int{par.StartScan, par.EndScan},
 		MaxScanDiff:          par.MaxScanNumberDifference,
 		MaxMzDiff:            par.MaxPrecursorDifference,
 		ScalingPower:         par.Scaling,
@@ -824,8 +824,8 @@ func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
 
 // WriteTextOutput writes results to text file
 func WriteTextOutput(par *Parameters, datasetA, datasetB *Dataset,
-	dotprodHistogram, massDiffHistogram []int64,
-	nComparisons, greaterThanCutoff, sAB, sBA int64) error {
+	dotprodHistogram, massDiffHistogram []int,
+	nComparisons, greaterThanCutoff, sAB, sBA int) error {
 
 	file, err := os.Create(par.OutputFilename)
 	if err != nil {
@@ -899,7 +899,7 @@ func WriteTextOutput(par *Parameters, datasetA, datasetB *Dataset,
 }
 
 // WriteExperimentalOutput writes experimental histogram data
-func WriteExperimentalOutput(par *Parameters, massDiffDotProductHistogram [][]int64) error {
+func WriteExperimentalOutput(par *Parameters, massDiffDotProductHistogram [][]int) error {
 	if par.ExperimentalFeatures != 1 {
 		return nil
 	}
@@ -1002,19 +1002,19 @@ func main() {
 
 	// Initialize histograms
 	fmt.Println("matching spectra and computing set distance.")
-	dotprodHistogram := make([]int64, dotprodHistogramBins)
-	massDiffHistogram := make([]int64, dotprodHistogramBins)
+	dotprodHistogram := make([]int, dotprodHistogramBins)
+	massDiffHistogram := make([]int, dotprodHistogramBins)
 
-	var massDiffDotProductHistogram [][]int64
+	var massDiffDotProductHistogram [][]int
 	if par.ExperimentalFeatures == 1 {
-		massDiffDotProductHistogram = make([][]int64, massdiffHistogramBins)
+		massDiffDotProductHistogram = make([][]int, massdiffHistogramBins)
 		for i := 0; i < massdiffHistogramBins; i++ {
-			massDiffDotProductHistogram[i] = make([]int64, dotprodHistogramBins)
+			massDiffDotProductHistogram[i] = make([]int, dotprodHistogramBins)
 		}
 	}
 
-	var nComparisons, greaterThanCutoff, sAB, sBA int64
-	var datasetAActualCompared, datasetBActualCompared int64
+	var nComparisons, greaterThanCutoff, sAB, sBA int
+	var datasetAActualCompared, datasetBActualCompared int
 
 	// Compare A to B
 	ComputeDotProdHistogram(par, datasetA, datasetB, dotprodHistogram,
