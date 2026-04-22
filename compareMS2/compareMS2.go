@@ -60,7 +60,6 @@ type Spectrum struct {
 	Charge            int
 	Bin               []float64
 	PrecursorMz       float64
-	NPeaks            int
 	BasepeakIntensity float64
 	TotalIonCurrent   float64
 }
@@ -100,7 +99,6 @@ type Parameters struct {
 	QC                         int
 	BinSize                    float64
 	MinPeaks                   int
-	PeakCount                  int
 	MinMz                      float64
 	MaxMz                      float64
 	NBins                      int
@@ -138,7 +136,6 @@ func NewParameters() *Parameters {
 		QC:                         0,
 		BinSize:                    0.2,
 		MinPeaks:                   20,
-		PeakCount:                  0,
 		MinMz:                      109,
 		MaxMz:                      2000,
 		NBins:                      9455,
@@ -297,7 +294,6 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 	fmt.Printf("checking dataset %c (\"%s\")...", dataset.ID, dataset.Filename)
 
 	scanner := bufio.NewScanner(file)
-	nPeaks := 0
 	specCount := 0
 
 	for scanner.Scan() {
@@ -306,23 +302,9 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 			continue
 		}
 
-		// Check if line is a peak (starts with a digit)
-		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-			nPeaks++
-			continue
-		}
-
 		if strings.HasPrefix(line, "TITLE=") {
 			specCount++
-			if nPeaks > par.PeakCount {
-				par.PeakCount = nPeaks
-			}
-			nPeaks = 0
 		}
-	}
-
-	if nPeaks > par.PeakCount {
-		par.PeakCount = nPeaks
 	}
 
 	fmt.Printf("done (contains %d MS2 spectra)\n", specCount)
@@ -505,7 +487,6 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 				dataset.RTsCouldBeRead = true
 			}
 		} else if strings.HasPrefix(line, "END") {
-			dataset.Spectra[i].NPeaks = len(dataset.Spectra[i].Peaks)
 			dataset.Spectra[i].BasepeakIntensity = 0
 			dataset.Spectra[i].TotalIonCurrent = 0
 
@@ -612,7 +593,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 		if A.Scan > par.EndScan {
 			break
 		}
-		if A.NPeaks < par.MinPeaks {
+		if len(A.Peaks) < par.MinPeaks {
 			continue
 		}
 		if A.BasepeakIntensity < par.MinBasepeakIntensity {
@@ -641,7 +622,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 			if B.Scan > par.EndScan {
 				break
 			}
-			if B.NPeaks < par.MinPeaks {
+			if len(B.Peaks) < par.MinPeaks {
 				continue
 			}
 			if B.BasepeakIntensity < par.MinBasepeakIntensity {
@@ -734,7 +715,6 @@ type JSONOutput struct {
 	NrGtCutoff               int                    `json:"nrGtCutoff"`
 	NrComparisons            int                    `json:"nrComparisons"`
 	MinPeaks                 int                    `json:"minPeaks"`
-	MaxPeaks                 int                    `json:"maxPeaks"`
 	MzRange                  [2]float64             `json:"mzRange"`
 	MzBinSize                float64                `json:"mzBinSize"`
 	NrMzBins                 int                    `json:"nrMzBins"`
@@ -805,7 +785,6 @@ func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
 		NrGtCutoff:           greaterThanCutoff,
 		NrComparisons:        nComparisons,
 		MinPeaks:             par.MinPeaks,
-		MaxPeaks:             par.PeakCount,
 		MzRange:              [2]float64{par.MinMz, par.MaxMz},
 		MzBinSize:            par.BinSize,
 		NrMzBins:             par.NBins,
@@ -898,7 +877,6 @@ func WriteTextOutput(par *Parameters, datasetA, datasetB *Dataset,
 	fmt.Fprintf(file, "n_gt_cutoff\t%d\n", greaterThanCutoff)
 	fmt.Fprintf(file, "n_comparisons\t%d\n", nComparisons)
 	fmt.Fprintf(file, "min_peaks\t%d\n", par.MinPeaks)
-	fmt.Fprintf(file, "max_peaks\t%d\n", par.PeakCount)
 	fmt.Fprintf(file, "m/z_range\t%.4f\t%.4f\n", par.MinMz, par.MaxMz)
 	fmt.Fprintf(file, "m/z_bin_size\t%.4f\n", par.BinSize)
 	fmt.Fprintf(file, "n_m/z_bins\t%d\n", par.NBins)
