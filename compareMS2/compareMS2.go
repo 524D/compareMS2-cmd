@@ -45,12 +45,16 @@ const (
 	massdiffHistogramRange = 3.2
 )
 
+type Peak struct {
+	Mz        float64
+	Intensity float64
+}
+
 // Spectrum represents a single MS2 spectrum
 type Spectrum struct {
 	Scan              int64
 	RT                float64
-	Mz                []float64
-	Intensity         []float64
+	Peaks             []Peak
 	Charge            int
 	Bin               []float64
 	PrecursorMz       float64
@@ -97,7 +101,7 @@ type Parameters struct {
 	PeakCount                  int64
 	MinMz                      float64
 	MaxMz                      float64
-	NBins                      int64
+	NBins                      int
 	TopN                       int64
 	ExperimentalFeatures       int
 }
@@ -419,7 +423,6 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 
 	scanner := bufio.NewScanner(file)
 	i := 0
-	j := 0
 
 	// Initialize first spectrum with defaults
 	if len(dataset.Spectra) > 0 {
@@ -440,15 +443,14 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 
 		// Check if line is peak data (starts with digit)
 		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-			fields := strings.Fields(line)
-			if len(fields) >= 2 && j < int(par.PeakCount) {
-				mz, err1 := strconv.ParseFloat(fields[0], 64)
-				intensity, err2 := strconv.ParseFloat(fields[1], 64)
+			if len(parts) >= 2 {
+				mz, err1 := strconv.ParseFloat(parts[0], 64)
+				intensity, err2 := strconv.ParseFloat(parts[1], 64)
 				if err1 == nil && err2 == nil {
-					dataset.Spectra[i].Mz[j] = mz
-					dataset.Spectra[i].Intensity[j] = intensity
-					j++
+					// Append peak data to current spectrum
+					dataset.Spectra[i].Peaks = append(dataset.Spectra[i].Peaks, Peak{Mz: mz, Intensity: intensity})
 				}
+				// FIXME: log errors in parsing mz or intensity, but continue processing
 			}
 			continue
 		}
@@ -457,8 +459,6 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 			numStr := parseNumber(line)
 			if precursorMz, err := strconv.ParseFloat(numStr, 64); err == nil {
 				dataset.Spectra[i].PrecursorMz = precursorMz
-				dataset.Spectra[i].Mz = make([]float64, par.PeakCount)
-				dataset.Spectra[i].Intensity = make([]float64, par.PeakCount)
 				dataset.Spectra[i].Bin = make([]float64, par.NBins)
 			}
 		} else if strings.HasPrefix(line, "CHARGE=") {
@@ -494,16 +494,16 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 				dataset.RTsCouldBeRead = true
 			}
 		} else if strings.HasPrefix(line, "END") {
-			dataset.Spectra[i].NPeaks = j
+			dataset.Spectra[i].NPeaks = len(dataset.Spectra[i].Peaks)
 			dataset.Spectra[i].BasepeakIntensity = 0
 			dataset.Spectra[i].TotalIonCurrent = 0
 
-			// FIXME: Original C code starts loop at k=1, should probably be k=0
-			for k := 0; k < j; k++ {
-				if dataset.Spectra[i].BasepeakIntensity < dataset.Spectra[i].Intensity[k] {
-					dataset.Spectra[i].BasepeakIntensity = dataset.Spectra[i].Intensity[k]
+			// FIXME: Original C code starts loop at element 1, should probably be at element 0
+			for _, peak := range dataset.Spectra[i].Peaks {
+				if peak.Intensity > dataset.Spectra[i].BasepeakIntensity {
+					dataset.Spectra[i].BasepeakIntensity = peak.Intensity
 				}
-				dataset.Spectra[i].TotalIonCurrent += dataset.Spectra[i].Intensity[k]
+				dataset.Spectra[i].TotalIonCurrent += peak.Intensity
 			}
 
 			i++
@@ -512,7 +512,6 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 			}
 			dataset.Spectra[i].RT = par.StartRT
 			dataset.Spectra[i].Scan = par.StartScan
-			j = 0
 		}
 	}
 
@@ -528,48 +527,46 @@ func ScaleNormalizeBin(par *Parameters, dataset *Dataset) {
 		spec := &dataset.Spectra[j]
 
 		// Apply scaling and noise removal
-		for k := 0; k < spec.NPeaks; k++ {
-			if spec.Intensity[k] > par.Noise {
-				spec.Intensity[k] = math.Pow(spec.Intensity[k], par.Scaling)
+		for k := range spec.Peaks {
+			intensity := spec.Peaks[k].Intensity
+			if intensity > par.Noise {
+				spec.Peaks[k].Intensity = math.Pow(intensity, par.Scaling)
 			} else {
-				spec.Intensity[k] = 0
+				spec.Peaks[k].Intensity = 0
 			}
 		}
 
 		// Normalize against spectral vector magnitude
 		squareSum := 0.0
-		for k := 0; k < spec.NPeaks; k++ {
-			squareSum += spec.Intensity[k] * spec.Intensity[k]
+		for _, peak := range spec.Peaks {
+			squareSum += peak.Intensity * peak.Intensity
 		}
 		rootSquareSum := math.Sqrt(squareSum)
 
-		// Initialize bins to zero
-		for k := 0; k < int(par.NBins); k++ {
-			spec.Bin[k] = 0
-		}
-
-		// Normalize and bin
-		for k := 0; k < spec.NPeaks; k++ {
+		// Normalize and bin. Bins are auto-initialized to zero in Go, so we can skip that step.
+		for _, peak := range spec.Peaks {
+			intensity := peak.Intensity
 			if rootSquareSum > 0 {
-				spec.Intensity[k] = spec.Intensity[k] / rootSquareSum
+				intensity /= rootSquareSum
 			}
-			if spec.Mz[k] >= par.MinMz && spec.Mz[k] < par.MaxMz {
-				binIdx := int(math.Round((spec.Mz[k] - par.MinMz) / par.BinSize))
-				if binIdx >= 0 && binIdx < int(par.NBins) {
-					spec.Bin[binIdx] += spec.Intensity[k]
+			mz := peak.Mz
+			if mz >= par.MinMz && mz < par.MaxMz {
+				binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
+				if binIdx >= 0 && binIdx < par.NBins {
+					spec.Bin[binIdx] += intensity
 				}
 			}
 		}
 
 		// Normalize binned spectra
 		squareSum = 0
-		for k := 0; k < int(par.NBins); k++ {
-			squareSum += spec.Bin[k] * spec.Bin[k]
+		for _, bin := range spec.Bin {
+			squareSum += bin * bin
 		}
 		rootSquareSum = math.Sqrt(squareSum)
 		if rootSquareSum > 0 {
-			for k := 0; k < int(par.NBins); k++ {
-				spec.Bin[k] = spec.Bin[k] / rootSquareSum
+			for k := range spec.Bin {
+				spec.Bin[k] /= rootSquareSum
 			}
 		}
 	}
@@ -656,7 +653,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 			if math.Abs(B.PrecursorMz-A.PrecursorMz) < par.MaxPrecursorDifference {
 				// Compute dot product
 				dotProd := 0.0
-				for k := 0; k < int(par.NBins); k++ {
+				for k := 0; k < par.NBins; k++ {
 					dotProd += A.Bin[k] * B.Bin[k]
 				}
 
@@ -722,7 +719,7 @@ type JSONOutput struct {
 	MaxPeaks                 int64                  `json:"maxPeaks"`
 	MzRange                  [2]float64             `json:"mzRange"`
 	MzBinSize                float64                `json:"mzBinSize"`
-	NrMzBins                 int64                  `json:"nrMzBins"`
+	NrMzBins                 int                    `json:"nrMzBins"`
 	DotProdHistogram         HistogramData          `json:"dotProdHistogram"`
 	MassDiffDotProdHistogram *MassDiffHistogramData `json:"massDiffDotProdHistogram,omitempty"`
 }
@@ -839,8 +836,8 @@ func WriteTextOutput(par *Parameters, datasetA, datasetB *Dataset,
 	fmt.Fprintf(file, "dataset_A\t%s\n", datasetA.Filename)
 	fmt.Fprintf(file, "dataset_B\t%s\n", datasetB.Filename)
 
-	sizeA := int64(len(datasetA.Spectra))
-	sizeB := int64(len(datasetB.Spectra))
+	sizeA := len(datasetA.Spectra)
+	sizeB := len(datasetB.Spectra)
 
 	// Calculate and write set distance
 	switch par.Metric {
@@ -934,9 +931,9 @@ func main() {
 
 	// Calculate number of bins
 	if math.Floor((par.MaxMz-par.MinMz)/par.BinSize) == (par.MaxMz-par.MinMz)/par.BinSize {
-		par.NBins = int64((par.MaxMz - par.MinMz) / par.BinSize)
+		par.NBins = int((par.MaxMz - par.MinMz) / par.BinSize)
 	} else {
-		par.NBins = int64((par.MaxMz-par.MinMz)/par.BinSize) + 1
+		par.NBins = int((par.MaxMz-par.MinMz)/par.BinSize) + 1
 	}
 
 	fmt.Printf("spectrum bin size %.3f Th -> %d bins in [%.3f,%.3f]\n",
