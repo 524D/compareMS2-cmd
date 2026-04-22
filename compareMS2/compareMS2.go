@@ -298,10 +298,6 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
 		if strings.HasPrefix(line, "TITLE=") {
 			specCount++
 		}
@@ -350,11 +346,10 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 					dataset.Intensities[i] = 0.0
 				}
 
-				fields := strings.Fields(line)
-				if len(fields) >= 2 {
-					if mz, err := strconv.ParseFloat(fields[0], 64); err == nil {
+				if len(parts) >= 2 {
+					if mz, err := strconv.ParseFloat(parts[0], 64); err == nil {
 						if mz >= par.MinMz && mz <= par.MaxMz {
-							if intensity, err := strconv.ParseFloat(fields[1], 64); err == nil {
+							if intensity, err := strconv.ParseFloat(parts[1], 64); err == nil {
 								dataset.Intensities[i] += intensity
 							}
 						}
