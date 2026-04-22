@@ -32,9 +32,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"log"
 	"math"
 	"math/rand"
 	"os"
+	"runtime/pprof"
 	"strconv"
 	"strings"
 )
@@ -104,6 +106,7 @@ type Parameters struct {
 	NBins                      int
 	TopN                       int
 	ExperimentalFeatures       int
+	CPUProfile                 string
 }
 
 const (
@@ -141,6 +144,7 @@ func NewParameters() *Parameters {
 		NBins:                      9455,
 		TopN:                       -1,
 		ExperimentalFeatures:       0,
+		CPUProfile:                 "",
 	}
 }
 
@@ -166,6 +170,7 @@ func (p *Parameters) ParseFlags() error {
 	flag.Float64Var(&p.MaxMz, "U", p.MaxMz, "Maximum m/z")
 	flag.IntVar(&p.TopN, "N", p.TopN, "Top N spectra")
 	flag.IntVar(&p.ExperimentalFeatures, "x", p.ExperimentalFeatures, "Experimental features")
+	flag.StringVar(&p.CPUProfile, "profile", "", "CPU profiling output file")
 
 	// Custom flags for ranges
 	var scanRange string
@@ -933,6 +938,16 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		flag.Usage()
 		os.Exit(1)
+	}
+
+	if par.CPUProfile != "" {
+		fmt.Printf("writing CPU profile. Run go tool pprof compareMS2 %s view\n", par.CPUProfile)
+		f, err := os.Create(par.CPUProfile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		pprof.StartCPUProfile(f)
+		defer pprof.StopCPUProfile()
 	}
 
 	// Calculate number of bins
