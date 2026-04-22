@@ -516,6 +516,9 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 				}
 				dataset.Spectra[i].TotalIonCurrent += peak.Intensity
 			}
+			// Pre-process spectrum.
+			// We do this here, since the data is probably still in cache
+			ScaleNormalizeBinSpectrum(&dataset.Spectra[i], par)
 
 			i++
 			if i >= len(dataset.Spectra) {
@@ -534,54 +537,58 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 func ScaleNormalizeBin(par *Parameters, dataset *Dataset) {
 	fmt.Printf("scaling, normalizing and binning %d MS2 spectra from %s..", len(dataset.Spectra), dataset.Filename)
 
-	for j := 0; j < len(dataset.Spectra); j++ {
-		spec := &dataset.Spectra[j]
+	// for j := 0; j < len(dataset.Spectra); j++ {
+	// 	ScaleNormalizeBinSpectrum(&dataset.Spectra[j], par)
+	// }
+	fmt.Println(".done")
+}
 
-		// Apply scaling and noise removal
-		for k := range spec.Peaks {
-			intensity := spec.Peaks[k].Intensity
-			if intensity > par.Noise {
-				spec.Peaks[k].Intensity = math.Pow(intensity, par.Scaling)
-			} else {
-				spec.Peaks[k].Intensity = 0
-			}
-		}
+// ScaleNormalizeBinSpectrum processes a single spectrum: scaling, normalizing, and binning
+func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters) {
 
-		// Normalize against spectral vector magnitude
-		squareSum := 0.0
-		for _, peak := range spec.Peaks {
-			squareSum += peak.Intensity * peak.Intensity
+	// Apply scaling and noise removal
+	for k := range spec.Peaks {
+		intensity := spec.Peaks[k].Intensity
+		if intensity > par.Noise {
+			spec.Peaks[k].Intensity = math.Pow(intensity, par.Scaling)
+		} else {
+			spec.Peaks[k].Intensity = 0
 		}
-		rootSquareSum := math.Sqrt(squareSum)
+	}
 
-		// Normalize and bin. Bins are auto-initialized to zero in Go, so we can skip that step.
-		for _, peak := range spec.Peaks {
-			intensity := peak.Intensity
-			if rootSquareSum > 0 {
-				intensity /= rootSquareSum
-			}
-			mz := peak.Mz
-			if mz >= par.MinMz && mz < par.MaxMz {
-				binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
-				if binIdx >= 0 && binIdx < par.NBins {
-					spec.Bin[binIdx] += intensity
-				}
-			}
-		}
+	// Normalize against spectral vector magnitude
+	squareSum := 0.0
+	for _, peak := range spec.Peaks {
+		squareSum += peak.Intensity * peak.Intensity
+	}
+	rootSquareSum := math.Sqrt(squareSum)
 
-		// Normalize binned spectra
-		squareSum = 0
-		for _, bin := range spec.Bin {
-			squareSum += bin * bin
-		}
-		rootSquareSum = math.Sqrt(squareSum)
+	// Normalize and bin. Bins are auto-initialized to zero in Go, so we can skip that step.
+	for _, peak := range spec.Peaks {
+		intensity := peak.Intensity
 		if rootSquareSum > 0 {
-			for k := range spec.Bin {
-				spec.Bin[k] /= rootSquareSum
+			intensity /= rootSquareSum
+		}
+		mz := peak.Mz
+		if mz >= par.MinMz && mz < par.MaxMz {
+			binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
+			if binIdx >= 0 && binIdx < par.NBins {
+				spec.Bin[binIdx] += intensity
 			}
 		}
 	}
-	fmt.Println(".done")
+
+	// Normalize binned spectra
+	squareSum = 0
+	for _, bin := range spec.Bin {
+		squareSum += bin * bin
+	}
+	rootSquareSum = math.Sqrt(squareSum)
+	if rootSquareSum > 0 {
+		for k := range spec.Bin {
+			spec.Bin[k] /= rootSquareSum
+		}
+	}
 }
 
 // ComputeDotProdHistogram compares spectra and computes histograms
