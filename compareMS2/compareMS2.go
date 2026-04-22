@@ -106,6 +106,12 @@ type Parameters struct {
 	ExperimentalFeatures       int
 }
 
+const (
+	NOT_IN_RANGE = iota
+	IN_RANGE
+	IN_RANGE_AND_FIRST_PEAK
+)
+
 // NewParameters creates a Parameters struct with default values
 func NewParameters() *Parameters {
 	return &Parameters{
@@ -333,7 +339,7 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 
 		scanner2 := bufio.NewScanner(file2)
 		i := -1
-		specStatus := 2 // IN_RANGE_AND_FIRST_PEAK
+		specStatus := IN_RANGE_AND_FIRST_PEAK
 
 		for scanner2.Scan() {
 			line := strings.TrimSpace(scanner2.Text())
@@ -348,11 +354,11 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 
 			// Check if line is peak data
 			if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-				if specStatus == 0 { // NOT_IN_RANGE
+				if specStatus == NOT_IN_RANGE {
 					continue
 				}
-				if specStatus == 2 { // IN_RANGE_AND_FIRST_PEAK
-					specStatus = 1 // IN_RANGE
+				if specStatus == IN_RANGE_AND_FIRST_PEAK {
+					specStatus = IN_RANGE
 					i++
 					dataset.Intensities[i] = 0.0
 				}
@@ -368,12 +374,12 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 					}
 				}
 			} else if strings.HasPrefix(line, "BEGIN") {
-				specStatus = 2 // IN_RANGE_AND_FIRST_PEAK
+				specStatus = IN_RANGE_AND_FIRST_PEAK
 			} else if strings.HasPrefix(line, "SCANS=") || strings.HasPrefix(line, "###MSMS:") {
 				numStr := parseNumber(line)
 				if scan, err := strconv.Atoi(numStr); err == nil {
 					if scan < par.StartScan || scan > par.EndScan {
-						specStatus = 0 // NOT_IN_RANGE
+						specStatus = NOT_IN_RANGE
 					}
 				}
 			} else if strings.HasPrefix(line, "TITLE=") && strings.Contains(line, "scan=") {
@@ -383,7 +389,7 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 					numStr := parseNumber(line[scanIdx+5:])
 					if scan, err := strconv.Atoi(numStr); err == nil {
 						if scan < par.StartScan || scan > par.EndScan {
-							specStatus = 0 // NOT_IN_RANGE
+							specStatus = NOT_IN_RANGE
 						}
 					}
 				}
@@ -391,7 +397,7 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 				numStr := parseNumber(line)
 				if rt, err := strconv.ParseFloat(numStr, 64); err == nil {
 					if rt < par.StartRT || rt > par.EndRT {
-						specStatus = 0 // NOT_IN_RANGE
+						specStatus = NOT_IN_RANGE
 					}
 				}
 			}
