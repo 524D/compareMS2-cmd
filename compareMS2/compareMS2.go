@@ -71,7 +71,7 @@ type Dataset struct {
 	RTsCouldBeRead         bool
 	Spectra                []Spectrum
 	Intensities            []float64
-	Cutoff                 float64
+	IntensityCutoff        float64
 }
 
 // Parameters holds all command-line and processing parameters
@@ -398,14 +398,14 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 		}
 
 		if i < 0 {
-			dataset.Cutoff = 1e30
+			dataset.IntensityCutoff = 1e30
 		} else if i < par.TopN {
-			dataset.Cutoff = 0.0
+			dataset.IntensityCutoff = 0.0
 		} else {
-			dataset.Cutoff = quickSelect(dataset.Intensities, 0, i, par.TopN)
+			dataset.IntensityCutoff = quickSelect(dataset.Intensities, 0, i, par.TopN)
 		}
 
-		fmt.Printf("done (ion intensity threshold %.3f)\n", dataset.Cutoff)
+		fmt.Printf("done (ion intensity threshold %.3f)\n", dataset.IntensityCutoff)
 	}
 
 	return scanner.Err()
@@ -583,7 +583,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 
 		// Check top-N filter
 		if par.TopN > -1 && par.TopN < len(datasetA.Spectra) {
-			if datasetA.Intensities[i] <= datasetA.Cutoff {
+			if datasetA.Intensities[i] <= datasetA.IntensityCutoff {
 				continue
 			}
 		}
@@ -612,7 +612,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 
 			// Check top-N filter
 			if par.TopN > -1 && par.TopN < len(datasetB.Spectra) {
-				if datasetB.Intensities[j] <= datasetB.Cutoff {
+				if datasetB.Intensities[j] <= datasetB.IntensityCutoff {
 					continue
 				}
 			}
