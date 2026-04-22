@@ -514,16 +514,6 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 	return scanner.Err()
 }
 
-// ScaleNormalizeBin processes spectra: scaling, normalizing, and binning
-func ScaleNormalizeBin(par *Parameters, dataset *Dataset) {
-	fmt.Printf("scaling, normalizing and binning %d MS2 spectra from %s..", len(dataset.Spectra), dataset.Filename)
-
-	// for j := 0; j < len(dataset.Spectra); j++ {
-	// 	ScaleNormalizeBinSpectrum(&dataset.Spectra[j], par)
-	// }
-	fmt.Println(".done")
-}
-
 // ScaleNormalizeBinSpectrum processes a single spectrum: scaling, normalizing, and binning
 func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters) {
 
@@ -1001,10 +991,6 @@ func main() {
 		par.MaxRTDifference = 60
 		fmt.Println("retention time filters will be ignored")
 	}
-
-	// Scale, normalize, and bin
-	ScaleNormalizeBin(par, datasetA)
-	ScaleNormalizeBin(par, datasetB)
 
 	// Initialize histograms
 	fmt.Println("matching spectra and computing set distance.")
