@@ -61,7 +61,7 @@ type Spectrum struct {
 	// FIXME: Peaks Not used in ReadMGF2
 	nPeaks            int // Number of peaks, used after removing the actual peaks to save memory
 	Charge            int
-	Bin               []float64
+	Bin               []float32
 	PrecursorMz       float64
 	BasepeakIntensity float64
 	TotalIonCurrent   float64
@@ -76,7 +76,7 @@ type Dataset struct {
 	ScanNumbersCouldBeRead bool
 	RTsCouldBeRead         bool
 	Spectra                []Spectrum
-	Intensities            []float64 // FIXME: Peaks Not used in ReadMGF2
+	Intensities            []float64 // FIXME: Not used in ReadMGF2
 	IntensityCutoff        float64
 	SpectrumCount          int // Total number of spectra, including the onces that were filtered out
 }
@@ -458,7 +458,7 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 			numStr := parseNumber(line)
 			if precursorMz, err := strconv.ParseFloat(numStr, 64); err == nil {
 				dataset.Spectra[i].PrecursorMz = precursorMz
-				dataset.Spectra[i].Bin = make([]float64, par.NBins)
+				dataset.Spectra[i].Bin = make([]float32, par.NBins)
 			}
 		} else if strings.HasPrefix(line, "CHARGE=") {
 			numStr := parseNumber(line)
@@ -557,7 +557,7 @@ func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters) {
 		if mz >= par.MinMz && mz < par.MaxMz {
 			binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
 			if binIdx >= 0 && binIdx < par.NBins {
-				spec.Bin[binIdx] += intensity
+				spec.Bin[binIdx] += float32(intensity)
 			}
 		}
 	}
@@ -565,12 +565,12 @@ func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters) {
 	// Normalize binned spectra
 	squareSum = 0
 	for _, bin := range spec.Bin {
-		squareSum += bin * bin
+		squareSum += float64(bin * bin)
 	}
 	rootSquareSum = math.Sqrt(squareSum)
 	if rootSquareSum > 0 {
 		for k := range spec.Bin {
-			spec.Bin[k] /= rootSquareSum
+			spec.Bin[k] /= float32(rootSquareSum)
 		}
 	}
 }
@@ -656,7 +656,7 @@ func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 				// Compute dot product
 				dotProd := 0.0
 				for k := 0; k < par.NBins; k++ {
-					dotProd += A.Bin[k] * B.Bin[k]
+					dotProd += float64(A.Bin[k] * B.Bin[k])
 				}
 
 				if math.Abs(dotProd) <= 1.00 {
@@ -862,7 +862,7 @@ func ReadMGF2(par *Parameters, dataset *Dataset) error {
 
 // ScaleNormalizeBinSpectrum processes a single spectrum: scaling, normalizing, and binning
 func ScaleNormalizeBinSpectrum2(spec *Spectrum, par *Parameters, peaks []Peak) {
-	spec.Bin = make([]float64, par.NBins)
+	spec.Bin = make([]float32, par.NBins)
 
 	// Apply scaling and noise removal
 	for k := range peaks {
@@ -891,7 +891,7 @@ func ScaleNormalizeBinSpectrum2(spec *Spectrum, par *Parameters, peaks []Peak) {
 		if mz >= par.MinMz && mz < par.MaxMz {
 			binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
 			if binIdx >= 0 && binIdx < par.NBins {
-				spec.Bin[binIdx] += intensity
+				spec.Bin[binIdx] += float32(intensity)
 			}
 		}
 	}
@@ -899,12 +899,12 @@ func ScaleNormalizeBinSpectrum2(spec *Spectrum, par *Parameters, peaks []Peak) {
 	// Normalize binned spectra
 	squareSum = 0
 	for _, bin := range spec.Bin {
-		squareSum += bin * bin
+		squareSum += float64(bin * bin)
 	}
 	rootSquareSum = math.Sqrt(squareSum)
 	if rootSquareSum > 0 {
 		for k := range spec.Bin {
-			spec.Bin[k] /= rootSquareSum
+			spec.Bin[k] /= float32(rootSquareSum)
 		}
 	}
 	spec.nPeaks = len(peaks)
@@ -965,7 +965,7 @@ func ComputeDotProdHistogram2(par *Parameters, datasetA, datasetB *Dataset,
 				// Compute dot product
 				dotProd := 0.0
 				for k := 0; k < par.NBins; k++ {
-					dotProd += A.Bin[k] * B.Bin[k]
+					dotProd += float64(A.Bin[k] * B.Bin[k])
 				}
 
 				if math.Abs(dotProd) <= 1.00 {
