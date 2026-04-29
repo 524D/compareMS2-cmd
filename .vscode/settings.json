@@ -8,5 +8,9 @@
     ],
     "editor.insertSpaces": false,
     "C_Cpp.clang_format_fallbackStyle": "Visual Studio",
-    "C_Cpp.clang_format_style": "file:.vscode/.clang-format"
+    "C_Cpp.clang_format_style": "file:.vscode/.clang-format",
+    "[c]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false
+    }
 }
