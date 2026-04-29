@@ -9,10 +9,19 @@
         "type": "cppdbg",
         "request": "launch",
         "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
-        "args": ["-q", "0", "-N", "1000", "-b", "0.5", "-I", "200", "-L", "300.0", "-U", "3000.0",
-             "-A", "/c/Users/rjmarissen/data/compareMS2/primates/100222.LC4.IT4.XX.S01342.Go_go_1-D,5_01_357.mgf",
-             "-B", "/c/Users/rjmarissen/data/compareMS2/primates/100222.LC4.IT4.XX.S01336.Ho_sa_1-C,7_01_337.mgf",
-             "-o", "/c/Users/rjmarissen/data/compareMS2/primates/test_100222.LC4.IT4.XX.S01342.Go_go_1-D,5_01_357-100222.LC4.IT4.XX.S01336.Ho_sa_1-C,7_01_337.cmp"],
+        "args": [
+			"-p", "2.05", "-m", "10000 0", "-w", "10000", "-W", "1 1000000", "-r", "60", "-R", "0 100000", "-c", "0.8", "-f", "0", "-s", "0.5", "-n", "10", "-q", "0", "-d", "2", "-N", "-1", "-x", "1", "-o", "cpm2.tmp", 
+             "-A", "C:\\Users\\rjmarissen\\Downloads\\2019-4-9_CSL2.mgf",
+             "-B", "C:\\Users\\rjmarissen\\Downloads\\2019-4-9_CSL2.mgf",
+],
+	
+		"rob-tmp-args": [
+			"-q", "0", "-N", "1000", "-b", "0.5", "-I", "200", "-L", "300.0", "-U", "3000.0",
+	    "-A", "c:/Users/rjmarissen/data/compareMS2/primates/100222.LC4.IT4.XX.S01342.Go_go_1-D,5_01_357.mgf",
+		"-B", "c:/Users/rjmarissen/data/compareMS2/primates/100222.LC4.IT4.XX.S01336.Ho_sa_1-C,7_01_337.mgf", 
+		"-x", "1", 
+		"-o", "c:/Users/rjmarissen/data/compareMS2/primates/test_100222.LC4.IT4.XX.S01342.Go_go_1-D,5_01_357-100222.LC4.IT4.XX.S01336.Ho_sa_1-C,7_01_337.cmp"],
+
         "stopAtEntry": true,
         "cwd": "${fileDirname}",
         "environment": [],
@@ -28,6 +37,11 @@
         ],
         "preLaunchTask": "C/C++: gcc.exe build active file"
     },
+
+	
+	
+
+
        {
             "name": "gcc.exe - Build and debug active file",
             "type": "cppdbg",
@@ -76,6 +90,28 @@
             "request": "launch",
             "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
             "args": ["-i","C:\\Users\\rjmarissen\\data\\compareMS2\\1000ECXX\\cmp_list.txt","-o","C:\\Users\\rjmarissen\\data\\compareMS2\\1000ECXX\\comp","-c","0.8"],
+            "stopAtEntry": true,
+            "cwd": "${fileDirname}",
+            "environment": [],
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "C:\\TDM-GCC-64\\bin\\gdb.exe",
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "C/C++: gcc.exe build active file"
+        },
+
+        {
+            "name": "Debug3 compareMS2_to_distance_matrices.c",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
+            "args": ["-i","C:\\Users\\rjmarissen\\data\\compareMS2\\primates-full\\cmp_list-2.txt","-o","C:\\Users\\rjmarissen\\data\\compareMS2\\primates-full\\comp-2_distance_matrix.meg","-c","0.8", "-m", "-x", "C:\\Users\\rjmarissen\\data\\compareMS2\\primates-full\\sample_to_species2.txt"],
             "stopAtEntry": true,
             "cwd": "${fileDirname}",
             "environment": [],
