@@ -294,413 +294,99 @@ func parseNumber(s string) string {
 	return s[start:end]
 }
 
-// PreCheckMGF checks the MGF file and counts spectra
+// PreCheckMGF computer the intensity cutoff for top-N filtering
 func PreCheckMGF(par *Parameters, dataset *Dataset) error {
+	if par.TopN <= -1 {
+		dataset.IntensityCutoff = 0.0 // When TopN filtering is disabled, the cutoff is zero
+		return nil
+	}
+
 	file, err := os.Open(dataset.Filename)
 	if err != nil {
 		return fmt.Errorf("error opening dataset %c %s for reading: %v", dataset.ID, dataset.Filename, err)
 	}
 	defer file.Close()
 
-	fmt.Printf("checking dataset %c (\"%s\")...", dataset.ID, dataset.Filename)
-
 	scanner := bufio.NewScanner(file)
-	specCount := 0
+
+	specStatus := IN_RANGE
+	var intensities []float64
+	nPeaks := 0
+	SumIntensity := 0.0
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, "TITLE=") {
-			specCount++
-		}
-	}
 
-	fmt.Printf("done (contains %d MS2 spectra)\n", specCount)
-
-	// Initialize dataset
-	dataset.Spectra = make([]Spectrum, specCount)
-
-	// Handle top-N filtering
-	if par.TopN > -1 && par.TopN < specCount {
-		fmt.Printf("filtering top-%d spectra...", par.TopN)
-		dataset.Intensities = make([]float64, specCount)
-
-		// Re-open file for second pass
-		file2, err := os.Open(dataset.Filename)
-		if err != nil {
-			return err
-		}
-		defer file2.Close()
-
-		scanner2 := bufio.NewScanner(file2)
-		i := -1
-		specStatus := IN_RANGE_AND_FIRST_PEAK
-
-		for scanner2.Scan() {
-			line := strings.TrimSpace(scanner2.Text())
-			if line == "" {
+		// Check if line is peak data
+		if line[0] >= '0' && line[0] <= '9' {
+			nPeaks++
+			if specStatus == NOT_IN_RANGE {
 				continue
 			}
-
 			parts := strings.Fields(line)
-			if len(parts) == 0 {
-				continue
-			}
-
-			// Check if line is peak data
-			if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-				if specStatus == NOT_IN_RANGE {
-					continue
-				}
-				if specStatus == IN_RANGE_AND_FIRST_PEAK {
-					specStatus = IN_RANGE
-					i++
-					dataset.Intensities[i] = 0.0
-				}
-
-				if len(parts) >= 2 {
-					if mz, err := strconv.ParseFloat(parts[0], 64); err == nil {
-						if mz >= par.MinMz && mz <= par.MaxMz {
-							if intensity, err := strconv.ParseFloat(parts[1], 64); err == nil {
-								dataset.Intensities[i] += intensity
-							}
-						}
+			if len(parts) >= 2 {
+				mz, err1 := strconv.ParseFloat(parts[0], 64)
+				intensity, err2 := strconv.ParseFloat(parts[1], 64)
+				if err1 == nil && err2 == nil {
+					if mz >= par.MinMz && mz <= par.MaxMz {
+						// Compute sum of intensities for top-N filtering
+						SumIntensity += intensity
 					}
+					// FIXME: log errors in parsing mz or intensity, but continue processing
 				}
-			} else if strings.HasPrefix(line, "BEGIN") {
-				specStatus = IN_RANGE_AND_FIRST_PEAK
-			} else if strings.HasPrefix(line, "SCANS=") || strings.HasPrefix(line, "###MSMS:") {
-				numStr := parseNumber(line)
+			}
+		} else if strings.HasPrefix(line, "BEGIN") {
+			specStatus = IN_RANGE
+		} else if strings.HasPrefix(line, "SCANS=") || strings.HasPrefix(line, "###MSMS:") {
+			numStr := parseNumber(line)
+			if scan, err := strconv.Atoi(numStr); err == nil {
+				if scan < par.StartScan || scan > par.EndScan {
+					specStatus = NOT_IN_RANGE
+				}
+			}
+		} else if strings.HasPrefix(line, "TITLE=") && strings.Contains(line, "scan=") {
+			// Extract scan from TITLE
+			scanIdx := strings.Index(line, "scan=")
+			if scanIdx != -1 {
+				numStr := parseNumber(line[scanIdx+5:])
 				if scan, err := strconv.Atoi(numStr); err == nil {
 					if scan < par.StartScan || scan > par.EndScan {
 						specStatus = NOT_IN_RANGE
 					}
 				}
-			} else if strings.HasPrefix(line, "TITLE=") && strings.Contains(line, "scan=") {
-				// Extract scan from TITLE
-				scanIdx := strings.Index(line, "scan=")
-				if scanIdx != -1 {
-					numStr := parseNumber(line[scanIdx+5:])
-					if scan, err := strconv.Atoi(numStr); err == nil {
-						if scan < par.StartScan || scan > par.EndScan {
-							specStatus = NOT_IN_RANGE
-						}
-					}
-				}
-			} else if strings.HasPrefix(line, "RTINSECONDS=") {
-				numStr := parseNumber(line)
-				if rt, err := strconv.ParseFloat(numStr, 64); err == nil {
-					if rt < par.StartRT || rt > par.EndRT {
-						specStatus = NOT_IN_RANGE
-					}
-				}
-			}
-		}
-
-		if i < 0 {
-			dataset.IntensityCutoff = 1e30
-		} else if i < par.TopN {
-			dataset.IntensityCutoff = 0.0
-		} else {
-			dataset.IntensityCutoff = quickSelect(dataset.Intensities, 0, i, par.TopN)
-		}
-
-		fmt.Printf("done (ion intensity threshold %.3f)\n", dataset.IntensityCutoff)
-	}
-
-	return scanner.Err()
-}
-
-// ReadMGF reads the MGF file and populates the dataset
-func ReadMGF(par *Parameters, dataset *Dataset) error {
-	file, err := os.Open(dataset.Filename)
-	if err != nil {
-		return fmt.Errorf("error opening dataset %c %s for reading: %v", dataset.ID, dataset.Filename, err)
-	}
-	defer file.Close()
-
-	fmt.Printf("reading %d MS2 spectra from %s...", len(dataset.Spectra), dataset.Filename)
-
-	scanner := bufio.NewScanner(file)
-	i := 0
-
-	// Initialize first spectrum with defaults
-	if len(dataset.Spectra) > 0 {
-		dataset.Spectra[0].RT = par.StartRT
-		dataset.Spectra[0].Scan = par.StartScan
-	}
-
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if line == "" {
-			continue
-		}
-
-		parts := strings.Fields(line)
-		if len(parts) == 0 {
-			continue
-		}
-
-		// Check if line is peak data (starts with digit)
-		if len(line) > 0 && line[0] >= '0' && line[0] <= '9' {
-			if len(parts) >= 2 {
-				mz, err1 := strconv.ParseFloat(parts[0], 64)
-				intensity, err2 := strconv.ParseFloat(parts[1], 64)
-				if err1 == nil && err2 == nil {
-					// Append peak data to current spectrum
-					dataset.Spectra[i].Peaks = append(dataset.Spectra[i].Peaks, Peak{Mz: mz, Intensity: intensity})
-				}
-				// FIXME: log errors in parsing mz or intensity, but continue processing
-			}
-			continue
-		}
-
-		if strings.HasPrefix(line, "PEPMASS=") {
-			numStr := parseNumber(line)
-			if precursorMz, err := strconv.ParseFloat(numStr, 64); err == nil {
-				dataset.Spectra[i].PrecursorMz = precursorMz
-				dataset.Spectra[i].Bin = make([]float32, par.NBins)
-			}
-		} else if strings.HasPrefix(line, "CHARGE=") {
-			numStr := parseNumber(line)
-			if charge, err := strconv.Atoi(numStr); err == nil {
-				dataset.Spectra[i].Charge = charge
-			}
-		} else if strings.HasPrefix(line, "SCANS=") {
-			numStr := parseNumber(line)
-			if scan, err := strconv.Atoi(numStr); err == nil {
-				dataset.Spectra[i].Scan = scan
-				dataset.ScanNumbersCouldBeRead = true
-			}
-		} else if strings.HasPrefix(line, "###MSMS:") {
-			numStr := parseNumber(line)
-			if scan, err := strconv.Atoi(numStr); err == nil {
-				dataset.Spectra[i].Scan = scan
-				dataset.ScanNumbersCouldBeRead = true
-			}
-		} else if strings.HasPrefix(line, "TITLE=") && strings.Contains(line, "scan=") {
-			scanIdx := strings.Index(line, "scan=")
-			if scanIdx != -1 {
-				numStr := parseNumber(line[scanIdx+5:])
-				if scan, err := strconv.Atoi(numStr); err == nil {
-					dataset.Spectra[i].Scan = scan
-					dataset.ScanNumbersCouldBeRead = true
-				}
 			}
 		} else if strings.HasPrefix(line, "RTINSECONDS=") {
 			numStr := parseNumber(line)
 			if rt, err := strconv.ParseFloat(numStr, 64); err == nil {
-				dataset.Spectra[i].RT = rt
-				dataset.RTsCouldBeRead = true
+				if rt < par.StartRT || rt > par.EndRT {
+					specStatus = NOT_IN_RANGE
+				}
 			}
 		} else if strings.HasPrefix(line, "END") {
-			// Keep track of the spectrum with the highest peakcount
-			// This is only for backward compatibility, it is unused
-			if len(dataset.Spectra[i].Peaks) > par.PeakCount {
-				par.PeakCount = len(dataset.Spectra[i].Peaks)
-			}
 
-			dataset.Spectra[i].BasepeakIntensity = 0
-			dataset.Spectra[i].TotalIonCurrent = 0
-
-			// FIXME: Original C code starts loop at element 1, should probably be at element 0
-			for _, peak := range dataset.Spectra[i].Peaks {
-				if peak.Intensity > dataset.Spectra[i].BasepeakIntensity {
-					dataset.Spectra[i].BasepeakIntensity = peak.Intensity
-				}
-				dataset.Spectra[i].TotalIonCurrent += peak.Intensity
-			}
-			// Pre-process spectrum.
-			// We do this here, since the data is probably still in cache
-			ScaleNormalizeBinSpectrum(&dataset.Spectra[i], par)
-
-			i++
-			if i >= len(dataset.Spectra) {
-				break
-			}
-			dataset.Spectra[i].RT = par.StartRT
-			dataset.Spectra[i].Scan = par.StartScan
+			intensities = append(intensities, SumIntensity)
+			SumIntensity = 0.0
 		}
 	}
-	dataset.SpectrumCount = i
-
-	fmt.Println("done")
+	// When we don't have enough spectra to fill the top-N, the cutoff is zero
+	intensityCutoff := 0.0
+	if len(intensities) > par.TopN {
+		intensityCutoff = quickSelect(intensities, 0, len(intensities)-1, par.TopN)
+	}
+	fmt.Printf("done (ion intensity threshold %.3f)\n", intensityCutoff)
+	dataset.IntensityCutoff = intensityCutoff
 	return scanner.Err()
 }
 
-// ScaleNormalizeBinSpectrum processes a single spectrum: scaling, normalizing, and binning
-func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters) {
-
-	// Apply scaling and noise removal
-	for k := range spec.Peaks {
-		intensity := spec.Peaks[k].Intensity
-		if intensity > par.Noise {
-			spec.Peaks[k].Intensity = math.Pow(intensity, par.Scaling)
-		} else {
-			spec.Peaks[k].Intensity = 0
+// ReadMGF Reads the MGF file and populates the dataset, with top-N filtering
+func ReadMGF(par *Parameters, dataset *Dataset) error {
+	if par.TwoPass {
+		err := PreCheckMGF(par, dataset)
+		if err != nil {
+			return err
 		}
 	}
 
-	// Normalize against spectral vector magnitude
-	squareSum := 0.0
-	for _, peak := range spec.Peaks {
-		squareSum += peak.Intensity * peak.Intensity
-	}
-	rootSquareSum := math.Sqrt(squareSum)
-
-	// Normalize and bin. Bins are auto-initialized to zero in Go, so we can skip that step.
-	for _, peak := range spec.Peaks {
-		intensity := peak.Intensity
-		if rootSquareSum > 0 {
-			intensity /= rootSquareSum
-		}
-		mz := peak.Mz
-		if mz >= par.MinMz && mz < par.MaxMz {
-			binIdx := int(math.Round((mz - par.MinMz) / par.BinSize))
-			if binIdx >= 0 && binIdx < par.NBins {
-				spec.Bin[binIdx] += float32(intensity)
-			}
-		}
-	}
-
-	// Normalize binned spectra
-	squareSum = 0
-	for _, bin := range spec.Bin {
-		squareSum += float64(bin * bin)
-	}
-	rootSquareSum = math.Sqrt(squareSum)
-	if rootSquareSum > 0 {
-		for k := range spec.Bin {
-			spec.Bin[k] /= float32(rootSquareSum)
-		}
-	}
-}
-
-// ComputeDotProdHistogram compares spectra and computes histograms
-func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
-	dotprodHistogram []int, massDiffDotProductHistogram [][]int,
-	nComparisons, greaterThanCutoff, sAB, actualCompared *int, asymmetric bool) {
-
-	for i := 0; i < len(datasetA.Spectra); i++ {
-		A := &datasetA.Spectra[i]
-
-		// Check top-N filter
-		if par.TopN > -1 && par.TopN < len(datasetA.Spectra) {
-			if datasetA.Intensities[i] <= datasetA.IntensityCutoff {
-				continue
-			}
-		}
-
-		if A.Scan < par.StartScan {
-			continue
-		}
-		if A.Scan > par.EndScan {
-			break
-		}
-		if len(A.Peaks) < par.MinPeaks {
-			continue
-		}
-		if A.BasepeakIntensity < par.MinBasepeakIntensity {
-			continue
-		}
-		if A.TotalIonCurrent < par.MinTotalIonCurrent {
-			continue
-		}
-
-		maxDotProd := 0.0
-		(*actualCompared)++
-
-		for j := 0; j < len(datasetB.Spectra); j++ {
-			B := &datasetB.Spectra[j]
-
-			// Check top-N filter
-			if par.TopN > -1 && par.TopN < len(datasetB.Spectra) {
-				if datasetB.Intensities[j] <= datasetB.IntensityCutoff {
-					continue
-				}
-			}
-
-			if B.Scan < par.StartScan {
-				continue
-			}
-			if B.Scan > par.EndScan {
-				break
-			}
-			if len(B.Peaks) < par.MinPeaks {
-				continue
-			}
-			if B.BasepeakIntensity < par.MinBasepeakIntensity {
-				continue
-			}
-			if B.TotalIonCurrent < par.MinTotalIonCurrent {
-				continue
-			}
-
-			// Check scan number difference
-			if math.Abs(float64(A.Scan-B.Scan)) > par.MaxScanNumberDifference {
-				if B.Scan > A.Scan {
-					break
-				}
-				continue
-			}
-
-			// Check RT difference
-			if math.Abs(A.RT-B.RT) > par.MaxRTDifference {
-				if B.RT > A.RT {
-					break
-				}
-				continue
-			}
-
-			// Check precursor m/z difference
-			if math.Abs(B.PrecursorMz-A.PrecursorMz) < par.MaxPrecursorDifference {
-				// Compute dot product
-				dotProd := 0.0
-				for k := 0; k < par.NBins; k++ {
-					dotProd += float64(A.Bin[k] * B.Bin[k])
-				}
-
-				if math.Abs(dotProd) <= 1.00 {
-					// Apply spectrum metric if specified
-					if par.SpectrumMetric == 1 {
-						// Use spectral angle (SA)
-						dotProd = 1 - 2*(math.Acos(dotProd)/math.Pi)
-					}
-
-					// Update histogram
-					histIdx := dotprodHistogramBins/2 + int(math.Floor(dotProd*float64(dotprodHistogramBins/2-1e-9)))
-					if histIdx >= 0 && histIdx < dotprodHistogramBins {
-						dotprodHistogram[histIdx]++
-					}
-
-					// Update mass difference histogram (only for asymmetric comparison)
-					if par.ExperimentalFeatures == 1 && asymmetric {
-						massDiffBin := massdiffHistogramBins/2 + int(math.Floor((B.PrecursorMz-A.PrecursorMz)*massdiffHistogramBins/massdiffHistogramRange))
-						if massDiffBin >= 0 && massDiffBin < massdiffHistogramBins {
-							dotProdBin := dotprodHistogramBins/2 + int(math.Floor(dotProd*float64(dotprodHistogramBins/2-1e-9)))
-							if dotProdBin >= 0 && dotProdBin < dotprodHistogramBins {
-								massDiffDotProductHistogram[massDiffBin][dotProdBin]++
-							}
-						}
-					}
-				}
-
-				(*nComparisons)++
-
-				if dotProd > maxDotProd {
-					maxDotProd = dotProd
-				}
-			}
-		}
-
-		if maxDotProd > par.Cutoff {
-			(*greaterThanCutoff)++
-			(*sAB)++
-		}
-	}
-}
-
-// ReadMGF2 Reads the MGF file and populates the dataset, with top-N filtering
-func ReadMGF2(par *Parameters, dataset *Dataset) error {
 	file, err := os.Open(dataset.Filename)
 	if err != nil {
 		return fmt.Errorf("error opening dataset %c %s for reading: %v", dataset.ID, dataset.Filename, err)
@@ -738,9 +424,7 @@ func ReadMGF2(par *Parameters, dataset *Dataset) error {
 						// Append peak data to current spectrum
 						peaks = append(peaks, Peak{Mz: mz, Intensity: intensity})
 						// Compute sum of intensities for top-N filtering
-						if intensity, err := strconv.ParseFloat(parts[1], 64); err == nil {
-							spec.SumIntensity += intensity
-						}
+						spec.SumIntensity += intensity
 					}
 					// For BasepeakIntensity and TotalIonCurrent, don't use mz filter
 					// this is equal to the original C code
@@ -802,38 +486,45 @@ func ReadMGF2(par *Parameters, dataset *Dataset) error {
 			if nPeaks > par.PeakCount {
 				par.PeakCount = nPeaks
 			}
-			// if TopN filtering is enabled, keep track of the topN intensities and only store spectra that are in the topN
-			if par.TopN > -1 {
-				if len(dataset.Spectra) < par.TopN { // if we haven't reached topN spectra yet, just add the spectrum
-					// Pre-process spectrum.
-					ScaleNormalizeBinSpectrum2(&spec, par, peaks)
+			if par.TwoPass {
+				if spec.SumIntensity > dataset.IntensityCutoff {
+					ScaleNormalizeBinSpectrum(&spec, par, peaks)
 					dataset.Spectra = append(dataset.Spectra, spec)
-					// Keep track of the spectrum with the lowest intensity in the current topN
-					if dataset.IntensityCutoff == 0 || spec.SumIntensity < dataset.IntensityCutoff {
-						dataset.IntensityCutoff = spec.SumIntensity
-						minIdx = len(dataset.Spectra) - 1
-					}
-				} else if spec.SumIntensity > dataset.IntensityCutoff { // if we have reached topN spectra, only add the spectrum if its intensity is above the cutoff
-					// Pre-process spectrum.
-					ScaleNormalizeBinSpectrum2(&spec, par, peaks)
-					// Delete the spectrum with the lowest intensity and add the new spectrum
-					dataset.Spectra[minIdx] = spec
-					// Update intensity cutoff to the new lowest intensity in the topN
-					// Find the spectrum with the lowest intensity in the current topN
-					dataset.IntensityCutoff = dataset.Spectra[0].SumIntensity
-					minIdx = 0
-					for i := 1; i < len(dataset.Spectra); i++ {
-						if dataset.Spectra[i].SumIntensity < dataset.IntensityCutoff {
-							dataset.IntensityCutoff = dataset.Spectra[i].SumIntensity
-							minIdx = i
+				}
+			} else {
+				// if TopN filtering is enabled, keep track of the topN intensities and only store spectra that are in the topN
+				if par.TopN > -1 {
+					if len(dataset.Spectra) < par.TopN { // if we haven't reached topN spectra yet, just add the spectrum
+						// Pre-process spectrum.
+						ScaleNormalizeBinSpectrum(&spec, par, peaks)
+						dataset.Spectra = append(dataset.Spectra, spec)
+						// Keep track of the spectrum with the lowest intensity in the current topN
+						if dataset.IntensityCutoff == 0 || spec.SumIntensity < dataset.IntensityCutoff {
+							dataset.IntensityCutoff = spec.SumIntensity
+							minIdx = len(dataset.Spectra) - 1
+						}
+					} else if spec.SumIntensity > dataset.IntensityCutoff { // if we have reached topN spectra, only add the spectrum if its intensity is above the cutoff
+						// Pre-process spectrum.
+						ScaleNormalizeBinSpectrum(&spec, par, peaks)
+						// Delete the spectrum with the lowest intensity and add the new spectrum
+						dataset.Spectra[minIdx] = spec
+						// Update intensity cutoff to the new lowest intensity in the topN
+						// Find the spectrum with the lowest intensity in the current topN
+						dataset.IntensityCutoff = dataset.Spectra[0].SumIntensity
+						minIdx = 0
+						for i := 1; i < len(dataset.Spectra); i++ {
+							if dataset.Spectra[i].SumIntensity < dataset.IntensityCutoff {
+								dataset.IntensityCutoff = dataset.Spectra[i].SumIntensity
+								minIdx = i
+							}
 						}
 					}
+				} else { // No TopN filtering, just add the spectrum
+					// Pre-process spectrum.
+					// We do this here, since the data is probably still in cache
+					ScaleNormalizeBinSpectrum(&spec, par, peaks)
+					dataset.Spectra = append(dataset.Spectra, spec)
 				}
-			} else { // No TopN filtering, just add the spectrum
-				// Pre-process spectrum.
-				// We do this here, since the data is probably still in cache
-				ScaleNormalizeBinSpectrum2(&spec, par, peaks)
-				dataset.Spectra = append(dataset.Spectra, spec)
 			}
 			// Start a new spectrum
 			spec = Spectrum{}
@@ -847,7 +538,7 @@ func ReadMGF2(par *Parameters, dataset *Dataset) error {
 			spec.Scan = par.StartScan
 		}
 	}
-	if par.TopN > -1 {
+	if par.TopN > -1 && !par.TwoPass {
 		// After TopN filtering, the spectra are not in the same order as in the file
 		// Re-order spectra according to SpecIdx
 		sort.Slice(dataset.Spectra, func(i, j int) bool {
@@ -861,7 +552,7 @@ func ReadMGF2(par *Parameters, dataset *Dataset) error {
 }
 
 // ScaleNormalizeBinSpectrum processes a single spectrum: scaling, normalizing, and binning
-func ScaleNormalizeBinSpectrum2(spec *Spectrum, par *Parameters, peaks []Peak) {
+func ScaleNormalizeBinSpectrum(spec *Spectrum, par *Parameters, peaks []Peak) {
 	spec.Bin = make([]float32, par.NBins)
 
 	// Apply scaling and noise removal
@@ -911,7 +602,7 @@ func ScaleNormalizeBinSpectrum2(spec *Spectrum, par *Parameters, peaks []Peak) {
 }
 
 // ComputeDotProdHistogram compares spectra and computes histograms
-func ComputeDotProdHistogram2(par *Parameters, datasetA, datasetB *Dataset,
+func ComputeDotProdHistogram(par *Parameters, datasetA, datasetB *Dataset,
 	dotprodHistogram []int, massDiffDotProductHistogram [][]int,
 	nComparisons, greaterThanCutoff, sAB, actualCompared *int, asymmetric bool) {
 
@@ -1271,39 +962,15 @@ func main() {
 	datasetA := &Dataset{ID: 'A', Filename: par.DatasetAFilename}
 	datasetB := &Dataset{ID: 'B', Filename: par.DatasetBFilename}
 
-	if par.TwoPass {
-		// Pre-check MGF files
-		if err := PreCheckMGF(par, datasetA); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+	// Read MGF files
+	if err := ReadMGF(par, datasetA); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 
-		if err := PreCheckMGF(par, datasetB); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		// Read MGF files
-		if err := ReadMGF(par, datasetA); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err := ReadMGF(par, datasetB); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-	} else {
-		// Read MGF files
-		if err := ReadMGF2(par, datasetA); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
-
-		if err := ReadMGF2(par, datasetB); err != nil {
-			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-			os.Exit(1)
-		}
+	if err := ReadMGF(par, datasetB); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
 	// Check if scan numbers and RTs could be read
 	if !datasetA.ScanNumbersCouldBeRead {
@@ -1345,27 +1012,15 @@ func main() {
 	var datasetAActualCompared, datasetBActualCompared int
 
 	// Compare A to B
-	if par.TwoPass {
-		ComputeDotProdHistogram(par, datasetA, datasetB, dotprodHistogram,
-			massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
-			&sAB, &datasetAActualCompared, true)
-		fmt.Print(".")
+	ComputeDotProdHistogram(par, datasetA, datasetB, dotprodHistogram,
+		massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
+		&sAB, &datasetAActualCompared, true)
+	fmt.Print(".")
 
-		// Compare B to A
-		ComputeDotProdHistogram(par, datasetB, datasetA, dotprodHistogram,
-			massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
-			&sBA, &datasetBActualCompared, false)
-	} else {
-		ComputeDotProdHistogram2(par, datasetA, datasetB, dotprodHistogram,
-			massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
-			&sAB, &datasetAActualCompared, true)
-		fmt.Print(".")
-
-		// Compare B to A
-		ComputeDotProdHistogram2(par, datasetB, datasetA, dotprodHistogram,
-			massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
-			&sBA, &datasetBActualCompared, false)
-	}
+	// Compare B to A
+	ComputeDotProdHistogram(par, datasetB, datasetA, dotprodHistogram,
+		massDiffDotProductHistogram, &nComparisons, &greaterThanCutoff,
+		&sBA, &datasetBActualCompared, false)
 	fmt.Printf(".done (compared %d (|S_AB|=%d) spectra from dataset A with %d (|S_BA|=%d) spectra from dataset B)\n",
 		datasetAActualCompared, sAB, datasetBActualCompared, sBA)
 
