@@ -4,8 +4,7 @@ package main
 //
 // MIT License
 //
-// Copyright (c) 2022 Magnus Palmblad
-// Copyright (c) 2026 Rob Marissen
+// Copyright (c) Magnus Palmblad and Rob Marissen
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
