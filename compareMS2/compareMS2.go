@@ -378,6 +378,55 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 	return scanner.Err()
 }
 
+// StoreTopNSpectrum processes and stores a spectrum with TopN filtering
+func StoreTopNSpectrum(par *Parameters, dataset *Dataset, spec Spectrum, peaks []Peak, nPeaks int, minIdx *int) {
+	// Keep track of the spectrum with the highest peakcount
+	// This is only for backward compatibility, it is unused
+	if nPeaks > par.PeakCount {
+		par.PeakCount = nPeaks
+	}
+	if par.TwoPass {
+		if spec.SumIntensity > dataset.IntensityCutoff {
+			ScaleNormalizeBinSpectrum(&spec, par, peaks)
+			dataset.Spectra = append(dataset.Spectra, spec)
+		}
+	} else {
+		// if TopN filtering is enabled, keep track of the topN intensities and only store spectra that are in the topN
+		if par.TopN > -1 {
+			if len(dataset.Spectra) < par.TopN { // if we haven't reached topN spectra yet, just add the spectrum
+				// Pre-process spectrum.
+				ScaleNormalizeBinSpectrum(&spec, par, peaks)
+				dataset.Spectra = append(dataset.Spectra, spec)
+				// Keep track of the spectrum with the lowest intensity in the current topN
+				if dataset.IntensityCutoff == 0 || spec.SumIntensity < dataset.IntensityCutoff {
+					dataset.IntensityCutoff = spec.SumIntensity
+					*minIdx = len(dataset.Spectra) - 1
+				}
+			} else if spec.SumIntensity > dataset.IntensityCutoff { // if we have reached topN spectra, only add the spectrum if its intensity is above the cutoff
+				// Pre-process spectrum.
+				ScaleNormalizeBinSpectrum(&spec, par, peaks)
+				// Delete the spectrum with the lowest intensity and add the new spectrum
+				dataset.Spectra[*minIdx] = spec
+				// Update intensity cutoff to the new lowest intensity in the topN
+				// Find the spectrum with the lowest intensity in the current topN
+				dataset.IntensityCutoff = dataset.Spectra[0].SumIntensity
+				*minIdx = 0
+				for i := 1; i < len(dataset.Spectra); i++ {
+					if dataset.Spectra[i].SumIntensity < dataset.IntensityCutoff {
+						dataset.IntensityCutoff = dataset.Spectra[i].SumIntensity
+						*minIdx = i
+					}
+				}
+			}
+		} else { // No TopN filtering, just add the spectrum
+			// Pre-process spectrum.
+			// We do this here, since the data is probably still in cache
+			ScaleNormalizeBinSpectrum(&spec, par, peaks)
+			dataset.Spectra = append(dataset.Spectra, spec)
+		}
+	}
+}
+
 // ReadMGF Reads the MGF file and populates the dataset, with top-N filtering
 func ReadMGF(par *Parameters, dataset *Dataset) error {
 	if par.TwoPass {
@@ -481,51 +530,7 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 				spec.Charge = charge
 			}
 		} else if strings.HasPrefix(line, "END") {
-			// Keep track of the spectrum with the highest peakcount
-			// This is only for backward compatibility, it is unused
-			if nPeaks > par.PeakCount {
-				par.PeakCount = nPeaks
-			}
-			if par.TwoPass {
-				if spec.SumIntensity > dataset.IntensityCutoff {
-					ScaleNormalizeBinSpectrum(&spec, par, peaks)
-					dataset.Spectra = append(dataset.Spectra, spec)
-				}
-			} else {
-				// if TopN filtering is enabled, keep track of the topN intensities and only store spectra that are in the topN
-				if par.TopN > -1 {
-					if len(dataset.Spectra) < par.TopN { // if we haven't reached topN spectra yet, just add the spectrum
-						// Pre-process spectrum.
-						ScaleNormalizeBinSpectrum(&spec, par, peaks)
-						dataset.Spectra = append(dataset.Spectra, spec)
-						// Keep track of the spectrum with the lowest intensity in the current topN
-						if dataset.IntensityCutoff == 0 || spec.SumIntensity < dataset.IntensityCutoff {
-							dataset.IntensityCutoff = spec.SumIntensity
-							minIdx = len(dataset.Spectra) - 1
-						}
-					} else if spec.SumIntensity > dataset.IntensityCutoff { // if we have reached topN spectra, only add the spectrum if its intensity is above the cutoff
-						// Pre-process spectrum.
-						ScaleNormalizeBinSpectrum(&spec, par, peaks)
-						// Delete the spectrum with the lowest intensity and add the new spectrum
-						dataset.Spectra[minIdx] = spec
-						// Update intensity cutoff to the new lowest intensity in the topN
-						// Find the spectrum with the lowest intensity in the current topN
-						dataset.IntensityCutoff = dataset.Spectra[0].SumIntensity
-						minIdx = 0
-						for i := 1; i < len(dataset.Spectra); i++ {
-							if dataset.Spectra[i].SumIntensity < dataset.IntensityCutoff {
-								dataset.IntensityCutoff = dataset.Spectra[i].SumIntensity
-								minIdx = i
-							}
-						}
-					}
-				} else { // No TopN filtering, just add the spectrum
-					// Pre-process spectrum.
-					// We do this here, since the data is probably still in cache
-					ScaleNormalizeBinSpectrum(&spec, par, peaks)
-					dataset.Spectra = append(dataset.Spectra, spec)
-				}
-			}
+			StoreTopNSpectrum(par, dataset, spec, peaks, nPeaks, &minIdx)
 			// Start a new spectrum
 			spec = Spectrum{}
 			// Clear peaks, but keep the underlying array to avoid unnecessary allocations
