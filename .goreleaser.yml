@@ -1,0 +1,86 @@
+version: 2
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: compareMS2
+    dir: compareMS2
+    binary: compareMS2
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: linux
+        goarch: arm64
+
+  - id: compareMS2_to_distance_matrices
+    dir: compareMS2_to_distance_matrices
+    binary: compareMS2_to_distance_matrices
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm64
+      - goos: linux
+        goarch: arm64
+
+universal_binaries:
+  - id: compareMS2_darwin
+    ids:
+      - compareMS2
+    name_template: compareMS2
+    replace: true
+
+  - id: compareMS2_to_distance_matrices_darwin
+    ids:
+      - compareMS2_to_distance_matrices
+    name_template: compareMS2_to_distance_matrices
+    replace: true
+
+archives:
+  - id: default
+    format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - LICENSE.txt
+      - README.md
+
+checksum:
+  name_template: "checksums.txt"
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
