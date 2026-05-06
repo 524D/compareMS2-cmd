@@ -70,7 +70,7 @@ To build compareMS2 and compareMS2_to_distance_matrices from source:
 
 - [Install Git](https://git-scm.com/install/)
 - [Install Go](https://go.dev/doc/install)
-- In a CMD/PowerShell/Bash window, run: `go install github.com/524D/compareMS2-cmd/compareMS2@latest` and `github.com/524D/compareMS2-cmd/compareMS2_to_distance_matrices`.
+- In a CMD/PowerShell/Bash window, run: `go install github.com/524D/compareMS2-cmd/compareMS2@latest` and `go install github.com/524D/compareMS2-cmd/compareMS2_to_distance_matrices@latest`.
 After building, the programs will be located in a location set by the `GOBIN` environment variable (typically `$HOME/go/bin`)
 
 ## 3. Using compareMS2
