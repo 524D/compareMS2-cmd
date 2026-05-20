@@ -73,6 +73,15 @@ To build compareMS2 and compareMS2_to_distance_matrices from source:
 - In a CMD/PowerShell/Bash window, run: `go install github.com/524D/compareMS2-cmd/compareMS2@latest` and `go install github.com/524D/compareMS2-cmd/compareMS2_to_distance_matrices@latest`.
 After building, the programs will be located in a location set by the `GOBIN` environment variable (typically `$HOME/go/bin`)
 
+### Release
+
+New releases are build with [GoReleaser](https://goreleaser.com/) using GitHub actions.
+A pre-release can be build locally with:
+
+``
+goreleaser release --snapshot --clean
+``
+
 ## 3. Using compareMS2
 
 This section describes how to run the compareMS2 command line software. Every compareMS2 analysis consists of two phases: (1) pairwise comparison of all LC-MS/MS datasets and (2) calculating a distance matrix from all pairwise comparisons. The pairwise comparison of the datasets provides a measure of their similarity. The distance matrix can then be used for molecular phylogenetics, data quality control or other purposes.
