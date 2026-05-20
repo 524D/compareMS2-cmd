@@ -456,6 +456,9 @@ func ReadMGF(par *Parameters, dataset *Dataset) error {
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
 
 		// Check if line is peak data
 		if line[0] >= '0' && line[0] <= '9' {
