@@ -90,26 +90,31 @@ This section describes how to run the compareMS2 command line software. Every co
 
 The compareMS2 CLI has a small number of parameters, which are:
 
--A *first dataset filename*  
--B *second dataset filename*
--W *first scan number*, *last scan number*  
--R *first retention time*, *last retention time*  
--c *cutoff for spectral similarity*  
--o *output filename*  
--m *minimum base peak intensity*, *minimum total MS/MS intensity*  
--w *maximum scan number difference*  
--r *maximum retention time difference*  
--p *maximum difference in precursor mass*  
--s *intensity scaling before dot product*  
--n *noise threshold for dot product*  
--d *version of set distance metric*  
--q *version of QC metric*  
--N *include only N most intense spectra in comparison*  
--b *bin size for dot product*  
--I *minimum number of peaks for dot product*  
--L *lower m/z for dot product*  
--U *upper m/z for dot product*  
--x *experimental features*  
+-A *First dataset filename (required)*  
+-B *Second dataset filename (required)*  
+-I *Minimum peaks (default 20)*  
+-J *JSON output filename*  
+-L *Minimum m/z (default 109)*  
+-N *Top N spectra (default -1=all)*  
+-R *RT range (start,end)*  
+-U *Maximum m/z (default 2000)*  
+-W *Scan range (start,end)*  
+-X *Experimental output filename*  
+-b *Bin size (default 0.2)*  
+-c *Score cutoff (default 0.8)*  
+-d *Version of distance metric (0, 1 or 2=default)*  
+-f *Spectrum metric*  
+-m *Minimum intensity (basepeak,total)*  
+-n *Noise threshold*  
+-o *Output filename*  
+-p *Maximum difference in precursor mass (default 2.05)*  
+-profile *CPU profiling output filename*  
+-q *QC measure*  
+-r *Maximum retention time difference (default 60)*  
+-s *Scaling power (default 0.5)*  
+-two-pass *Use two-pass processing (first pass to determine top-N cutoff, second pass to read spectra)*  
+-w *Maximum scan number difference (default 10000)*  
+-x *Experimental features*  
 
 The compareMS2 GUI exposes some of these, and determine others automatically, e.g. the dataset filenames from a specified directory.
 
