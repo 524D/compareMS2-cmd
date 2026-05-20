@@ -1,0 +1,2 @@
+# The C code is not maintained, avoid that GitHub detects the project as C language
+*.c linguist-detectable=false
