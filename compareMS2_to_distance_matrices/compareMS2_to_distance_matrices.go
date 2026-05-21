@@ -252,22 +252,22 @@ func createMega(outputStem string, distances DistanceMatrix, species *Species, c
 
 	fmt.Println("writing distance matrix in MEGA version < 12 format...")
 
-	fmt.Fprintln(file, "#mega")
-	fmt.Fprintf(file, "TITLE: %s (lower-left triangular matrix, cutoff=%.4f)\n\n", filename, cutoff)
+	fmt.Fprint(file, "#mega\r\n")
+	fmt.Fprintf(file, "TITLE: %s (lower-left triangular matrix, cutoff=%.4f)\r\n\r\n", filename, cutoff)
 
 	used := species.usedIndices()
 
 	// Output QC values
 	for _, i := range used {
-		fmt.Fprintf(file, "QC\t%s\t%.3f\n", species.name[i], qcData[i].Average())
+		fmt.Fprintf(file, "QC\t%s\t%.3f\r\n", species.name[i], qcData[i].Average())
 	}
-	fmt.Fprintln(file, "")
+	fmt.Fprint(file, "\r\n")
 
 	// Output species names
 	for _, i := range used {
-		fmt.Fprintf(file, "#%s\n", species.name[i])
+		fmt.Fprintf(file, "#%s\r\n", species.name[i])
 	}
-	fmt.Fprint(file, "\n\n")
+	fmt.Fprint(file, "\r\n\r\n")
 
 	// Output distance matrix (lower triangular)
 	for ui := 1; ui < len(used); ui++ {
@@ -275,7 +275,7 @@ func createMega(outputStem string, distances DistanceMatrix, species *Species, c
 		for ux := 0; ux < ui; ux++ {
 			fmt.Fprintf(file, "%1.5f\t", distances[used[ux]][y].Value)
 		}
-		fmt.Fprintln(file, "")
+		fmt.Fprint(file, "\r\n")
 	}
 
 	return nil
