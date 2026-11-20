@@ -8,8 +8,10 @@ A GUI for this software is available at [compareMS2](https://github.com/524D/com
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.2 How does compareMS2 differ from other tools?](#12-How-does-compareMS2-differ-from-other-tools)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[1.3 What can compareMS2 be used for?](#13-What-can-compareMS2-be-used-for)  
 [2. Installing compareMS2](#2-Installing-compareMS2)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.1 Running compareMS2 in development mode](#21-Running-compareMS2-in-development-mode)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.2 Building compareMS2](#22-Building-compareMS2)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.1 Building from source](#21-Building-from-source)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.2 Running tests](#22-Running-tests)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.3 Release](#23-Release)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[2.4 Recent Changes](#24-Recent-Changes)  
 [3. Using compareMS2](#3-Using-compareMS2)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.1 Configuring compareMS2](#31-Configuring-compareMS2)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[3.2 Calculating distance matrices](#32-Calculating-distance-matrices)  
@@ -73,14 +75,68 @@ To build compareMS2 and compareMS2_to_distance_matrices from source:
 - In a CMD/PowerShell/Bash window, run: `go install github.com/524D/compareMS2-cmd/compareMS2@latest` and `go install github.com/524D/compareMS2-cmd/compareMS2_to_distance_matrices@latest`.
 After building, the programs will be located in a location set by the `GOBIN` environment variable (typically `$HOME/go/bin`)
 
-### Release
+### 2.1 Building from source
+
+`compareMS2` and `compareMS2_to_distance_matrices` are organized as separate nested Go modules (requiring Go 1.26.1+ and `CGO_ENABLED=0`). Build each binary from the repository root (`compareMS2-cmd`):
+
+**Linux / macOS (Bash):**
+
+```bash
+cd compareMS2 && CGO_ENABLED=0 go build -o ../compareMS2 .
+cd ../compareMS2_to_distance_matrices && CGO_ENABLED=0 go build -o ../compareMS2_to_distance_matrices .
+cd ..
+```
+
+**Windows (PowerShell):**
+
+```powershell
+$env:CGO_ENABLED = "0"
+cd compareMS2
+go build -o ..\compareMS2.exe .
+cd ..\compareMS2_to_distance_matrices
+go build -o ..\compareMS2_to_distance_matrices.exe .
+cd ..
+```
+
+### 2.2 Running tests
+
+Unit tests are located in `compareMS2/compareMS2_test.go` and `compareMS2_to_distance_matrices/compareMS2_to_distance_matrices_test.go`. Run `go vet` and `go test` inside each module directory:
+
+**Linux / macOS (Bash):**
+
+```bash
+cd compareMS2 && go vet ./... && go test -v ./...
+cd ../compareMS2_to_distance_matrices && go vet ./... && go test -v ./...
+cd ..
+```
+
+**Windows (PowerShell):**
+
+```powershell
+cd compareMS2
+go vet ./...
+go test -v ./...
+cd ..\compareMS2_to_distance_matrices
+go vet ./...
+go test -v ./...
+cd ..
+```
+
+### 2.3 Release
 
 New releases are build with [GoReleaser](https://goreleaser.com/) using GitHub actions.
 A pre-release can be build locally with:
 
-``
+```bash
 goreleaser release --snapshot --clean
-``
+```
+
+### 2.4 Recent Changes
+
+- **Two-pass `-N` tie handling (`compareMS2`):** Fixed `PreCheckMGF` and `StoreTopNSpectrum` so tied boundary intensities (including datasets where all spectra have identical summed intensities) fill up to `TopN` spectra without displacing strictly higher-intensity spectra, and properly handle `-N 0`, `-N < 0`, and `-N >= spectrumCount`.
+- **Two-pass blank MGF line handling (`compareMS2`):** Updated `PreCheckMGF` to skip empty lines during `-two-pass` scanning, preventing an index-out-of-range panic on blank lines.
+- **Empty-dataset metric 2 guard (`compareMS2`):** Updated `WriteJSON` and `WriteTextOutput` to emit `"INF"` instead of `NaN` when either dataset has `0` spectra under `-d 2`.
+- **Unit test suites:** Added `compareMS2/compareMS2_test.go` and `compareMS2_to_distance_matrices/compareMS2_to_distance_matrices_test.go`.
 
 ## 3. Using compareMS2
 
@@ -120,9 +176,22 @@ The compareMS2 GUI exposes some of these, and determine others automatically, e.
 
 ### 3.2 Calculating distance matrices
 
-Distance matrices are calculated using a separate executable, compareMS2_to_distance_matrices. This can also average the distances for multiple replicates per species for more accurate molecular phylogenetic analysis. For this, a tab-delimited file with filenames and species names are required. If no such file is provided, one is created automatically, using the filenames as sample "species". The distance matrix can currently be saved in the MEGA or Nexus formats. [MEGA](https://www.megasoftware.net/) is recommended for creating trees from compareMS2 results.
+Distance matrices are calculated using a separate executable, `compareMS2_to_distance_matrices`. The `-i` input list accepts both `.json` and `.txt` pairwise comparison files produced by `compareMS2`. This tool can also average the distances for multiple replicates per species using a tab-delimited sample-to-species mapping file (`-x`). If no mapping file is provided, species names are inferred from the dataset filenames. Supported output formats are NEXUS (`-n`, default), MEGA < 12 (`-m`, written with CRLF line endings for Windows compatibility), MEGA 12+ (`-m2`), and JSON (`-J`). [MEGA](https://www.megasoftware.net/) is recommended for creating trees from compareMS2 results.
 
 ### 3.3 Running compareMS2
+
+Run pairwise comparisons between MGF files (optionally enabling `-two-pass -N` for top-N spectrum filtering and `-J` for JSON output):
+
+```bash
+compareMS2 -A sampleA.mgf -B sampleB.mgf -o AB.txt -J AB.json
+compareMS2 -A sampleA.mgf -B sampleC.mgf -two-pass -N 2000 -o AC.txt -J AC.json
+```
+
+Then combine pairwise results into distance matrices:
+
+```bash
+compareMS2_to_distance_matrices -i results_list.txt -o distance_matrix -x species_map.txt -n -m -m2 -J
+```
 
 ### 3.4 Molecular phylogenetics
 
