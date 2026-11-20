@@ -77,6 +77,8 @@ type Dataset struct {
 	Spectra                []Spectrum
 	Intensities            []float64 // FIXME: Not used in ReadMGF2
 	IntensityCutoff        float64
+	IntensityTieAllowance  int
+	TwoPassFilterActive    bool
 	SpectrumCount          int // Total number of spectra, including the onces that were filtered out
 }
 
@@ -295,8 +297,17 @@ func parseNumber(s string) string {
 
 // PreCheckMGF computer the intensity cutoff for top-N filtering
 func PreCheckMGF(par *Parameters, dataset *Dataset) error {
-	if par.TopN <= -1 {
+	if par.TopN < 0 {
 		dataset.IntensityCutoff = 0.0 // When TopN filtering is disabled, the cutoff is zero
+		dataset.IntensityTieAllowance = 0
+		dataset.TwoPassFilterActive = false
+		return nil
+	}
+	if par.TopN == 0 {
+		dataset.IntensityCutoff = math.Inf(1)
+		dataset.IntensityTieAllowance = 0
+		dataset.TwoPassFilterActive = true
+		fmt.Printf("done (ion intensity threshold %.3f)\n", dataset.IntensityCutoff)
 		return nil
 	}
 
@@ -315,6 +326,9 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
 
 		// Check if line is peak data
 		if line[0] >= '0' && line[0] <= '9' {
@@ -367,13 +381,25 @@ func PreCheckMGF(par *Parameters, dataset *Dataset) error {
 			SumIntensity = 0.0
 		}
 	}
-	// When we don't have enough spectra to fill the top-N, the cutoff is zero
+	// When we don't have enough spectra to fill the top-N, disable filtering
 	intensityCutoff := 0.0
 	if len(intensities) > par.TopN {
-		intensityCutoff = quickSelect(intensities, 0, len(intensities)-1, par.TopN)
+		intensityCutoff = quickSelect(intensities, 0, len(intensities)-1, par.TopN-1)
+		nGreater := 0
+		for _, val := range intensities {
+			if val > intensityCutoff {
+				nGreater++
+			}
+		}
+		dataset.IntensityCutoff = intensityCutoff
+		dataset.IntensityTieAllowance = par.TopN - nGreater
+		dataset.TwoPassFilterActive = true
+	} else {
+		dataset.IntensityCutoff = 0.0
+		dataset.IntensityTieAllowance = 0
+		dataset.TwoPassFilterActive = false
 	}
 	fmt.Printf("done (ion intensity threshold %.3f)\n", intensityCutoff)
-	dataset.IntensityCutoff = intensityCutoff
 	return scanner.Err()
 }
 
@@ -385,7 +411,12 @@ func StoreTopNSpectrum(par *Parameters, dataset *Dataset, spec Spectrum, peaks [
 		par.PeakCount = nPeaks
 	}
 	if par.TwoPass {
-		if spec.SumIntensity > dataset.IntensityCutoff {
+		keep := !dataset.TwoPassFilterActive || spec.SumIntensity > dataset.IntensityCutoff
+		if !keep && spec.SumIntensity == dataset.IntensityCutoff && dataset.IntensityTieAllowance > 0 {
+			dataset.IntensityTieAllowance--
+			keep = true
+		}
+		if keep {
 			ScaleNormalizeBinSpectrum(&spec, par, peaks)
 			dataset.Spectra = append(dataset.Spectra, spec)
 		}
@@ -773,7 +804,9 @@ func WriteJSON(par *Parameters, datasetA, datasetB *Dataset,
 			setDistance = "INF"
 		}
 	case 2: // compareMS2 2.0 symmetric metric
-		if (sAB + sBA) > 0 {
+		if sizeA == 0 || sizeB == 0 {
+			setDistance = "INF"
+		} else if (sAB + sBA) > 0 {
 			setDistance = 1.0/(float64(sAB)/float64(2*sizeA)+float64(sBA)/float64(2*sizeB)) - 1.0
 		} else {
 			setDistance = (4.0*float64(sizeA)*float64(sizeB))/float64(sizeA+sizeB) - 1.0
@@ -863,7 +896,9 @@ func WriteTextOutput(par *Parameters, datasetA, datasetB *Dataset,
 			fmt.Fprintf(file, "set_distance\tINF\n")
 		}
 	case 2: // compareMS2 2.0 symmetric metric
-		if (sAB + sBA) > 0 {
+		if sizeA == 0 || sizeB == 0 {
+			fmt.Fprintf(file, "set_distance\tINF\n")
+		} else if (sAB + sBA) > 0 {
 			distance := 1.0/(float64(sAB)/float64(2*sizeA)+float64(sBA)/float64(2*sizeB)) - 1.0
 			fmt.Fprintf(file, "set_distance\t%.10f\n", distance)
 		} else {
